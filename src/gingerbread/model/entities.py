@@ -87,6 +87,24 @@ class Player:
     #: only so the renderer can fade the shield in instead of popping it.
     guard: float = 0.0
 
+    #: The skill being held down, and for how long.  Charging lives on the
+    #: player rather than on the spell because only one thing can be charged at
+    #: a time, and "what is he doing right now" is a fact about him.
+    charging: str = ""
+    charge_time: float = 0.0
+    charge_idle: float = 0.0
+
+    #: Seconds left on each carried-state skill.  Kept as separate timers, not
+    #: one dict, so a rule that reads "is the armour up" cannot silently get a
+    #: typo'd key back as None.
+    aura: float = 0.0          # 雷鳴 · lightning armour
+    aura_hits: float = 0.0     # energy stored by being hit
+    haste: float = 0.0         # 疾風 · the charging run
+    mending: float = 0.0       # 聖癒 · the healing light
+    mend_tick: float = 0.0
+    holy: float = 0.0          # 聖光 · the burning light
+    holy_tick: float = 0.0
+
     @property
     def helpless(self) -> bool:
         """True when the player cannot move, swing or dash this tick."""
@@ -302,6 +320,8 @@ class Hazard:
     charges: float = -1.0
     #: Set once something has been caught, so a trap can be drawn as sprung.
     sprung: bool = False
+    #: What it does when its life runs out — the water cage's parting blast.
+    strength: float = 0.0
 
 
 @dataclass(slots=True)

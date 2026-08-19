@@ -96,8 +96,13 @@ def _walk_toward(state: State, monster: Monster, tx: float, ty: float,
 
 
 def _ground_drag(state: State, monster: Monster) -> float:
-    """Return the movement multiplier from whatever it is standing in."""
-    slowest = 1.0
+    """Return the movement multiplier from whatever it is standing in.
+
+    怒潮's mist is folded in here rather than given its own branch at every
+    call site: from a monster's point of view it is simply more difficult
+    ground, which is exactly what a puddle is.
+    """
+    slowest = C.MIST_SLOW if state.mist_ticks > 0 else 1.0
     for pool in state.puddles:
         if g.distance(monster.x, monster.y, pool.x, pool.y) <= pool.radius:
             slowest = min(slowest, pool.slow)

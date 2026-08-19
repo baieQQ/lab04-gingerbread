@@ -88,6 +88,20 @@ GUARD_FADE: Final = 0.12          # seconds the shield takes to appear
 #: Gretel, because the player guarding is standing between her and them.
 GUARD_NUDGE: Final = 26.0
 
+# ── skills ───────────────────────────────────────────────────────────
+#: Seconds a chargeable skill may be held.  Charging is on the skill's own key
+#: (L or ；) rather than on K: K is the guard, and a player holding it to charge
+#: lightning would also be refusing to swing without being told why.
+CHARGE_MAX: Final = 3.0
+#: The most 技能冷卻 can take off: half, and no further.
+COOLDOWN_FLOOR: Final = 0.5
+#: How long a charged key must go unseen before it counts as released.  Longer
+#: than one tick because movement and casting arrive as separate actions, so a
+#: held key is genuinely absent on roughly half of all ticks.
+CHARGE_RELEASE: Final = 0.10
+#: Slow applied by 怒潮's mist — two thirds of normal speed.
+MIST_SLOW: Final = 2.0 / 3.0
+
 # ── mending ──────────────────────────────────────────────────────────
 #: Chance a kill leaves a heart behind, rolled **only while Hansel is hurt**.
 #: A drop rather than a trickle of regeneration on purpose: regeneration quietly

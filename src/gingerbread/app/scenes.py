@@ -160,6 +160,15 @@ class TutorialScene(Scene):
             "這些預兆在真的夜晚都會出現。",
         ),
         (
+            "技能",
+            (
+                "按 [L] 放一階技能，按 [；] 放二階技能。",
+                "白天用技能點學技能，一階一點、二階兩點，各自佔一個鍵。",
+                "閃電這種可以蓄力的，按著不放會越蓄越大，放開才打出去。",
+            ),
+            "技能有冷卻，格子填滿才能再放一次。",
+        ),
+        (
             "準備好了",
             (
                 "你已學會移動、揮燈、衝刺、守衛與讀招。",
@@ -208,6 +217,7 @@ class TutorialScene(Scene):
         (("hansel", -60), ("bomber", 80)),                 # 衝刺閃避
         (("hansel", -60), ("brute", 80)),                  # 舉燈守衛
         (("archer", -80), ("mirror", 80)),                 # 敵人攻擊預兆
+        (("hansel", 0),),                                  # 技能
         (("gretel", -70), ("hansel", 70)),                 # 準備好了
     )
 
@@ -223,6 +233,16 @@ class TutorialScene(Scene):
                 if self.page == 4:            # 守衛：把那個圈畫出來
                     pygame.draw.circle(ui.surface, P.MOON, (x, base_y),
                                        ui.s(26), max(2, ui.s(2)))
+                if self.page == 6:            # 技能：把兩個鍵畫在旁邊
+                    for i, (tag, colour) in enumerate(
+                            ((("L"), P.ARCANE_BRIGHT), (("；"), P.EMBER))):
+                        cell = ui.box(0, 0, 54, 34)
+                        cell.center = (x + ui.s(-70 + i * 140), base_y)
+                        ui.panel(cell, P.PANEL, colour)
+                        ui.text(tag, cell.center, "body", colour, "center")
+                        ui.text(f"{i + 1} 階",
+                                (cell.centerx, cell.bottom + ui.s(12)),
+                                "small", P.BONE_DIM, "center")
                 if self.page == 2:            # 揮燈：把那道弧畫出來
                     pygame.draw.arc(ui.surface, P.EMBER,
                                     pygame.Rect(x - ui.s(6), base_y - ui.s(34),
@@ -527,11 +547,11 @@ class PlayScene(Scene):
         ui.text(str(state.meta.sugar), (ui.s(x), ui.s(25)), "body", P.SUGAR)
         x += 66
 
-        if state.meta.skill_points:
+        if state.meta.skill_points_1 or state.meta.skill_points_2:
             ui.text("技能點", (ui.s(x), ui.s(9)), "tiny", P.MUTED)
-            ui.text(str(state.meta.skill_points), (ui.s(x), ui.s(25)),
-                    "body", P.ARCANE)
-            x += 66
+            ui.text(f"{state.meta.skill_points_1}／{state.meta.skill_points_2}",
+                    (ui.s(x), ui.s(25)), "body", P.ARCANE)
+            x += 76
 
         if state.combo > 2:
             ui.text(f"連段 ×{state.combo}", (ui.s(x), ui.s(25)), "body", P.EMBER)
@@ -664,47 +684,87 @@ class PlayScene(Scene):
                 self.g.act(f"buy:{key}")
 
         # ── right: skills, paid in skill points ──────────────────────
-        ui.text(f"學新技能　（技能點 {state.meta.skill_points}）",
+        ui.text("學新技能",
                 (ui.s(right), ui.s(160)), "small", P.ARCANE)
-        skills = _col(ui, right, 178, width, 46 * len(SPELL_TABLE), gap=6)
-        for key, spec in sorted(SPELL_TABLE.items()):
+        # Two shelves side by side.  Eight skills in one column ran off the
+        # bottom of the screen, and stacking them also hid the thing that makes
+        # the list readable: L carries the left column, ；carries the right.
+        shelf_w = (width - 12) // 2
+        columns = {}
+        for tier in (1, 2):
+            head = ui.box(right + (tier - 1) * (shelf_w + 12), 168, shelf_w, 18)
+            left = state.meta.points_for(tier)
+            ui.text(f"{tier} 階　{'L' if tier == 1 else '；'} 鍵"
+                    f"　·　技能點 {left}",
+                    (head.centerx, head.centery), "small",
+                    P.ARCANE_BRIGHT if tier == 1 else P.EMBER, "center")
+            columns[tier] = _col(ui, right + (tier - 1) * (shelf_w + 12), 188,
+                                 shelf_w, 46 * 4, gap=5)
+
+        order = {"thunder": 0, "light": 1, "wind": 2, "water": 3}
+        for key, spec in sorted(SPELL_TABLE.items(),
+                                key=lambda kv: (kv[1].tier,
+                                                order.get(kv[1].element, 9))):
             known = key in state.meta.skills
             element = ELEMENTS.get(spec.element, {}).get("name", "")
-            tag = "已學會" if known else f"技能點 {spec.cost}"
-            # What it *does*, not just what it costs.  A list of prices asks the
-            # player to buy something they cannot picture.
-            sub = f"{spec.description}"
-            if ui.button(f"learn:{key}", skills.slot(ui.s(44)),
-                         f"{spec.name}（{element}）　冷卻 {spec.cooldown:.0f}s　{tag}",
+            tag = "已學會" if known else "1 點"
+            sub = ui.truncate(spec.description, ui.s(shelf_w - 24), "small")
+            if ui.button(f"learn:{key}", columns[spec.tier].slot(ui.s(44)),
+                         f"{spec.name}（{element}）　{spec.cooldown:.0f} 秒　{tag}",
                          sub, enabled=not known and
-                         state.meta.skill_points >= spec.cost,
-                         selected=known):
+                         state.meta.points_for(spec.tier) >= spec.cost,
+                selected=known):
                 self.g.act(f"learn:{key}")
 
         # ── the two carried slots ────────────────────────────────────
-        slots_y = 178 + 46 * len(SPELL_TABLE) + 14
+        # Directly under the two shelves, not below a column that no longer
+        # exists: the skills used to be one list of eight and this was measured
+        # from its height, which now overshoots into the 天黑 button.
+        slots_y = 396
         ui.text("帶上場的兩個", (ui.s(right), ui.s(slots_y)), "small", P.ARCANE)
         slot_cells = Stack.split(ui.box(right, slots_y + 16, width, 42),
                                  2, gap=ui.s(10))
         for index, (cell, tag) in enumerate(zip(slot_cells, ("L", "；"))):
             key = state.meta.slots[index]
             name = SPELL_TABLE[key].name if key in SPELL_TABLE else "空的"
+            tier = 1 if index == 0 else 2
+            same = [k for k in state.meta.skills
+                    if k in SPELL_TABLE and SPELL_TABLE[k].tier == tier]
             if ui.button(f"slot{index}", cell, f"{tag}　{name}",
-                         "點一下換" if state.meta.skills else "還沒學會",
-                         enabled=bool(state.meta.skills)):
+                         f"點一下換（會的 {len(same)} 個）" if same
+                         else f"還沒學會 {tier} 階技能",
+                         enabled=bool(same)):
                 self._cycle_slot(state, index)
 
-        if ui.button("night", ui.box(MID - 120, 566, 240, 48), "天黑",
-                     "準備好了就開始"):
+        # Both shelves have to be filled before the night will start.  A player
+        # who walks into night one with two empty slots has not chosen not to
+        # use skills — they have not noticed the skills exist, and they will
+        # spend the night wondering why two of their four keys do nothing.
+        empty = [i for i in (0, 1) if not state.meta.slots[i]]
+        ready = not empty
+        if ready:
+            why = "準備好了就開始"
+        else:
+            missing = "、".join(f"{i + 1} 階" for i in empty)
+            why = f"先選好 {missing} 技能（在右邊）"
+        if ui.button("night", ui.box(MID - 140, 566, 280, 48), "天黑",
+                     why, enabled=ready):
             self.g.act("begin_night")
 
     def _cycle_slot(self, state: m.State, index: int) -> None:
-        """Put the next learned skill into this slot.
+        """Put the next learned skill of *this slot's tier* into it.
 
-        Cycling rather than opening a picker: with four skills and two slots, a
+        Cycling rather than opening a picker: with four skills per shelf, a
         second menu would cost more attention than the choice is worth.
+
+        Filtered by tier, because the slots stopped being interchangeable.  An
+        unfiltered cycle offered first-tier skills for the ；shelf and the rules
+        refused them — correctly, and by raising, so the game closed the moment
+        anyone pressed the button.
         """
-        owned = list(state.meta.skills)
+        want = 1 if index == 0 else 2
+        owned = [k for k in state.meta.skills
+                 if k in SPELL_TABLE and SPELL_TABLE[k].tier == want]
         if not owned:
             return
         current = state.meta.slots[index]
@@ -1093,13 +1153,24 @@ class StoryScene(Scene):
             ui.text("今晚第一次出現", (ui.s(MID), ui.s(y)), "small",
                     P.MUTED, "center")
             y += 26
-            if hands_on:
+            # Compact whenever the full rows would not fit.  Six species is
+            # 324 pixels of list on a 520-pixel field, which pushed the button
+            # off the bottom of the screen — the one control the card has.
+            if hands_on or len(fresh) > 3:
                 # Just the names.  Six full rows ran off the bottom of the
                 # screen on night one, and every word of them is about to be
                 # said again — properly — in the practice round.
-                ui.text("　·　".join(MONSTERS[k].name for k in fresh),
-                        (ui.s(MID), ui.s(y)), "title", P.VILLAGER, "center")
-                y += 46
+                names = [MONSTERS[k].name for k in fresh]
+                for row in (names[:3], names[3:]):
+                    if not row:
+                        continue
+                    ui.text("　·　".join(row), (ui.s(MID), ui.s(y)),
+                            "title", P.VILLAGER, "center")
+                    y += 34
+                if not hands_on:
+                    ui.text("完整說明在暫停選單的圖鑑裡",
+                            (ui.s(MID), ui.s(y)), "small", P.MUTED, "center")
+                    y += 26
             else:
                 for key in fresh:
                     y = self._row(ui, y, MONSTERS[key].name,

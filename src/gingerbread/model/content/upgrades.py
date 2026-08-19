@@ -61,11 +61,18 @@ UPGRADES: Final[dict[str, UpgradeSpec]] = {
         description="攻擊力 +1",
         base_cost=7, max_level=4,
         stat="attack", per_level=1.0),
+
+    "focus": UpgradeSpec(
+        key="focus", name="技能冷卻",
+        description="所有技能冷卻 −10%（最多 −50%）",
+        base_cost=6, max_level=5, stat="cooldown_pct", per_level=0.10),
 }
 
 #: Shown in the between-nights shop, in this order.  The day-only pair is
 #: excluded: those are spent with action points, not sugar.
+
 SHOP_ORDER: Final[tuple[str, ...]] = (
+    "focus",
     "mend", "lantern", "haste", "reach", "shade", "vigour")
 
 #: Offered mid-run in endless, which has no shop.

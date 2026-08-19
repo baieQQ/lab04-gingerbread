@@ -98,9 +98,26 @@ def step(state: State, inputs: set[str], director) -> State:
 
     if "swing" in inputs:
         swing(state)
-    for word in inputs:
-        if word.startswith("cast:"):
-            cast(state, word.split(":", 1)[1])
+
+    # Charging is "the key is still down"; firing is "it no longer is".  The
+    # shell already sends ``cast:`` on every frame the key is held, so holding
+    # and releasing are readable here without a new action word — and a player
+    # who taps still gets the un-charged version, which is what a tap means.
+    held = {w.split(":", 1)[1] for w in inputs if w.startswith("cast:")}
+    p = state.player
+    # A held key does *not* arrive on every tick: the shell sends movement and
+    # casting as two separate actions, so the movement tick always looks like
+    # "the key is up".  Charging therefore ends only after several consecutive
+    # ticks with no cast — which is why holding the key used to fire instantly.
+    if p.charging:
+        if p.charging in held:
+            p.charge_idle = 0.0
+        else:
+            p.charge_idle += dt
+            if p.charge_idle > C.CHARGE_RELEASE:
+                release_charge(state)
+    for key in held:
+        cast(state, key)
 
     # Nothing arrives or acts until the screen has finished going dark, so the
     # player is never hit by something that spawned behind a fade.
@@ -131,6 +148,7 @@ def _move_player(state: State, inputs: set[str], dt: float) -> None:
     p.stun = max(0.0, p.stun - dt)
     p.invulnerable = max(0.0, p.invulnerable - dt)
     p.doused = max(0.0, p.doused - dt)
+    _tick_skills(state, dt)
 
     # Held, not pressed.  ``inputs`` is level-triggered, so this is simply
     # "is K down this tick" — there is no window to hit and nothing to time.
@@ -182,11 +200,79 @@ def _move_player(state: State, inputs: set[str], dt: float) -> None:
     for pool in state.puddles:
         if g.distance(p.x, p.y, pool.x, pool.y) <= pool.radius:
             drag = min(drag, pool.slow)
-    speed = C.DASH_SPEED if p.dash > 0 else stats.move_speed * recover * drag
+    rush = 1.0
+    if p.haste > 0:
+        spec = SPELL_TABLE.get("windrun")
+        rush = float(spec.params.get("speed", 2.4)) if spec else 2.4
+    speed = (C.DASH_SPEED if p.dash > 0
+             else stats.move_speed * recover * drag * rush)
     p.x, p.y = g.slide(state.obstacles, p.x, p.y,
                        g.clamp(p.x + vx * speed * dt, C.PLAY_MARGIN, C.WIDTH - C.PLAY_MARGIN),
                        g.clamp(p.y + vy * speed * dt, C.PLAY_MARGIN, C.HEIGHT - C.PLAY_MARGIN),
                        C.PLAYER_RADIUS)
+
+
+def _tick_skills(state: State, dt: float) -> None:
+    """Run the carried-state skills: the burning light, the armour, the run.
+
+    All four are timers on the player, counted in one place so a skill can
+    never be left running by a code path that forgot about it.
+    """
+    p = state.player
+
+    # 聖光 — burns whatever stands near him, half a heart a second.
+    if p.holy > 0:
+        p.holy = max(0.0, p.holy - dt)
+        spec = SPELL_TABLE.get("holy")
+        if spec is not None:
+            p.holy_tick += dt
+            step = 1.0 / max(0.01, float(spec.params.get("burn", 0.5)))
+            if p.holy_tick >= step:
+                p.holy_tick -= step
+                radius = float(spec.params.get("radius", 80.0))
+                for target in list(state.monsters) + list(state.bosses):
+                    if not target.hittable:
+                        continue
+                    if g.distance(target.x, target.y, p.x, p.y) <= radius:
+                        damage_target(state, target, 1, element="light",
+                                      from_x=p.x, from_y=p.y)
+
+    # 聖癒 — the only mid-night healing either of them gets.
+    if p.mending > 0:
+        p.mending = max(0.0, p.mending - dt)
+        spec = SPELL_TABLE.get("blessing")
+        every = float(spec.params.get("every", 4.0)) if spec else 4.0
+        p.mend_tick += dt
+        if p.mend_tick >= every:
+            p.mend_tick -= every
+            stats = derive(state)
+            p.hp = min(stats.max_hp, p.hp + 1)
+            state.meta.sister_hp = min(state.meta.max_sister_hp,
+                                       state.meta.sister_hp + 1)
+            state.effects.append(Effect("mend", p.x, p.y, 0.5, 0.5))
+            state.effects.append(Effect("mend", C.SISTER_X, C.SISTER_Y, 0.5, 0.5))
+            state.emit("mended")
+
+    # 雷鳴 — and the discharge when it lapses.
+    if p.aura > 0:
+        p.aura = max(0.0, p.aura - dt)
+        if p.aura <= 0:
+            from .effects import _kill_within
+
+            spec = SPELL_TABLE.get("thunderclap")
+            radius = float(spec.params.get("burst_radius", 80.0)) if spec else 80.0
+            burst = int(spec.params.get("boss", 16)) if spec else 16
+            _kill_within(state, p.x, p.y, radius, "thunder", push=90.0,
+                         boss=burst + int(min(6.0, p.aura_hits)))
+            state.effects.append(Effect("bolt", p.x, p.y, 0.4, 0.4, radius))
+            state.feedback.bump(shake=14.0, freeze=0.08)
+            state.emit("thunderclap")
+
+    if p.haste > 0:
+        p.haste = max(0.0, p.haste - dt)
+
+    if state.mist_ticks > 0:
+        state.mist_ticks -= 1
 
 
 def swing(state: State) -> None:
@@ -463,6 +549,32 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
                            p.x, p.y, C.PLAYER_RADIUS):
         return False
 
+    # 疾風 — he is the hazard now.  Checked before the guard because running
+    # someone down is an attack, and an attack that lost to a defensive state
+    # would make the two skills cancel each other for no reason a player could
+    # guess.
+    if p.haste > 0:
+        spec = SPELL_TABLE.get("windrun")
+        push = float(spec.params.get("push", 120.0)) if spec else 120.0
+        _push(monster, p.x, p.y, push)
+        damage_target(state, monster,
+                      int(spec.params.get("boss", 5)) if spec and monster in
+                      state.bosses else 999,
+                      from_x=p.x, from_y=p.y)
+        state.effects.append(Effect("gale", monster.x, monster.y, 0.3, 0.3))
+        return True
+
+    # 雷鳴 — the armour answers for him.  It costs the attacker a heart and a
+    # moment, and stores the hit for the discharge when the five seconds lapse.
+    if p.aura > 0:
+        p.aura_hits += 1.0
+        monster.stunned = max(monster.stunned, 0.45)
+        damage_target(state, monster, 1, element="thunder",
+                      from_x=p.x, from_y=p.y)
+        state.effects.append(Effect("spark", monster.x, monster.y, 0.25, 0.25))
+        state.emit("zapped")
+        return True
+
     # Guarding: it bumps off him and he loses nothing.  The nudge is the same
     # small recoil a lantern hit gives, through the same routine, because
     # contact that moves nothing does not read as contact at all — but it stays
@@ -655,6 +767,19 @@ def _advance_hazards(state: State, dt: float) -> None:
     for hazard in state.hazards:
         hazard.life -= dt
         if hazard.life <= 0:
+            # The water cage does not simply expire — it is a five-second
+            # sentence, and this is the sentence being carried out.
+            if hazard.kind == "cage":
+                from .effects import _kill_within
+
+                _kill_within(state, hazard.x, hazard.y, hazard.radius,
+                             "water", push=hazard.strength,
+                             boss=int(hazard.charges) if hazard.charges > 0
+                             else 6)
+                state.effects.append(Effect("cage_burst", hazard.x, hazard.y,
+                                            0.5, 0.5, hazard.radius))
+                state.feedback.bump(shake=12.0, freeze=0.06)
+                state.emit("cage_burst")
             continue
 
         hazard.x += hazard.vx * dt
@@ -673,6 +798,11 @@ def _advance_hazards(state: State, dt: float) -> None:
             hazard.sprung = True
             if hazard.charges > 0:
                 hazard.charges -= 1
+            if hazard.kind == "cage":
+                # Refreshed every tick: whoever is inside stays inside, and
+                # anyone who wanders in afterwards is caught too.
+                target.stunned = max(target.stunned, hazard.life + 0.1)
+                continue
             target.stunned = max(target.stunned, hazard.hold)
             target.knockback = 0.0
             if moving:
@@ -810,9 +940,41 @@ def cast(state: State, key: str) -> None:
             and not any(m.active for m in state.monsters) and not state.bosses:
         return                          # never let a spell be wasted on nothing
 
-    state.cooldowns[key] = int(round(spec.cooldown / C.FIXED_DT))
+    if getattr(spec, "charge", False):
+        # Hold to build it.  The cooldown is not spent until it actually goes
+        # off, so letting go early costs the charge, never the skill.
+        p = state.player
+        if p.charging != key:
+            p.charging, p.charge_time = key, 0.0
+            state.emit(f"charge:{key}")
+        else:
+            p.charge_time = min(C.CHARGE_MAX, p.charge_time + C.FIXED_DT)
+        return
+
+    _spend_cooldown(state, key, spec)
     entry.fn(state, spec)
     state.emit(f"cast:{key}")
+
+
+def _spend_cooldown(state: State, key: str, spec) -> None:
+    """Put a skill on cooldown, after the 技能冷卻 upgrade has had its say."""
+    scale = derive(state).cooldown_scale
+    state.cooldowns[key] = max(1, int(round(spec.cooldown * scale / C.FIXED_DT)))
+
+
+def release_charge(state: State) -> None:
+    """Let go of a charged skill and fire it at whatever it reached."""
+    p = state.player
+    key, p.charging = p.charging, ""
+    spec = SPELL_TABLE.get(key)
+    entry = SPELL_EFFECTS.get(spec.effect) if spec else None
+    if spec is None or entry is None:
+        p.charge_time = 0.0
+        return
+    _spend_cooldown(state, key, spec)
+    entry.fn(state, spec)
+    state.emit(f"cast:{key}")
+    p.charge_time = 0.0
 
 
 # ── stage setup ──────────────────────────────────────────────────────
@@ -829,6 +991,10 @@ def begin_night(state: State, director) -> State:
     state.dusk = 0.0
     state.fog_scale = 1.0
     state.hazards = []
+    state.mist_ticks = 0
+    p = state.player
+    p.charging, p.charge_time = "", 0.0
+    p.aura = p.aura_hits = p.haste = p.mending = p.holy = 0.0
     # Dawn puts her back together.  Carrying her wounds forward meant one bad
     # night quietly decided the next three, and a run could be lost hours before
     # it ended — the player was still playing, but the game was already over.

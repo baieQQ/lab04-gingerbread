@@ -29,6 +29,7 @@ import pygame
 from ..model import Phase, State, lights_of
 from ..model import constants as C
 from ..model.content import BOSSES, MONSTERS
+from ..model.content import SPELLS as SPELL_TABLE_VIEW
 from . import figures as F
 from . import palette as P
 from .assets import AssetLibrary
@@ -601,6 +602,40 @@ class Board:
             pygame.draw.circle(self.surface, P.BLOOD, (int(p.x), int(p.y)), 14, 2)
             return
 
+        if p.aura > 0:
+            # 雷鳴 — a crackling ring that shrinks as the five seconds run out,
+            # so the player can see how long they may keep being reckless.
+            span = int(50 * (0.55 + 0.45 * min(1.0, p.aura / 5.0)))
+            for i in range(3):
+                a = ticks / 6.0 + i * math.tau / 3
+                pygame.draw.circle(
+                    self.surface, P.ARCANE_BRIGHT,
+                    (int(p.x + math.cos(a) * span * 0.5),
+                     int(p.y + math.sin(a) * span * 0.5)), max(2, 3))
+            pygame.draw.circle(self.surface, P.ARCANE, (int(p.x), int(p.y)),
+                               span, 1)
+        if p.haste > 0:
+            for i in range(4):
+                trail = 6 + i * 7
+                pygame.draw.circle(
+                    self.surface, _clamp_colour((178, 232, 218), 150 - i * 32)[:3],
+                    (int(p.x - p.face_x * trail), int(p.y - p.face_y * trail)),
+                    max(1, 5 - i))
+        if p.holy > 0 or p.mending > 0:
+            spec = SPELL_TABLE_VIEW.get("holy")
+            radius = int(spec.params.get("radius", 80.0)) if spec else 80
+            pygame.draw.circle(self.surface, (250, 232, 168),
+                               (int(p.x), int(p.y)), radius, 1)
+        if p.charging:
+            # The charge, drawn as it grows.  Releasing early is allowed, so the
+            # player has to be able to see what they would be releasing.
+            grow = min(1.0, p.charge_time / C.CHARGE_MAX)
+            pygame.draw.circle(self.surface, P.ARCANE_BRIGHT, (int(p.x), int(p.y)),
+                               int(26 + 24 * grow), 2)
+            pygame.draw.arc(self.surface, P.EMBER,
+                            pygame.Rect(int(p.x) - 34, int(p.y) - 34, 68, 68),
+                            0.0, math.tau * grow, 3)
+
         if p.guarding:
             # A ring around him, breathing.  It reads as a *state* rather than
             # as a swing, which is the whole difference between this key and J —
@@ -772,6 +807,20 @@ class Board:
             elif effect.kind == "guard_hit":
                 pygame.draw.circle(self.surface, P.MOON, centre,
                                    max(1, int(14 * (1 - k))), 2)
+            elif effect.kind == "cage_burst":
+                pygame.draw.circle(self.surface, (110, 168, 232), centre,
+                                   max(2, int(effect.magnitude * (1.2 - k))), 3)
+            elif effect.kind == "surge_wave":
+                for ring in (1.0, 0.66, 0.33):
+                    pygame.draw.circle(
+                        self.surface, (96, 150, 220), centre,
+                        max(2, int(effect.magnitude * (1.4 - k) * ring)), 2)
+            elif effect.kind == "aura":
+                pygame.draw.circle(self.surface, P.ARCANE_BRIGHT, centre,
+                                   max(2, int(effect.magnitude * (0.6 + k))), 2)
+            elif effect.kind == "gale":
+                pygame.draw.circle(self.surface, (178, 232, 218), centre,
+                                   max(2, int(22 * (1 - k))), 2)
             elif effect.kind == "mend":
                 pygame.draw.circle(self.surface, P.BLOOD, centre,
                                    max(2, int(26 * (1 - k))), 2)

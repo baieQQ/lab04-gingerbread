@@ -196,9 +196,10 @@ class SpellSpec:
     unlock_night: int = 1
     #: One of the four elements: "thunder", "light", "wind", "water".
     element: str = "thunder"
-    #: Skill points to learn it.  One point arrives each day, so the campaign
-    #: hands out one new skill per night survived and the player never has to
-    #: choose between eating and casting.
+    #: Points to learn it, **from its own tier's pool**.  One each: the tiers
+    #: no longer compete for the same currency, so a price difference between
+    #: them would only mean "this shelf refills slower", which is a worse way to
+    #: say the same thing than simply granting fewer points.
     cost: int = 1
     #: Seconds before it can be used again.  Skills are unlimited: what makes
     #: them a decision is *when*, not *how many are left*.  A stock of charges
@@ -216,6 +217,10 @@ class SpellSpec:
     #: whose entire point is being set down *before* anything arrives; refusing
     #: that cast would forbid the only way it is meant to be used.
     needs_target: bool = True
+    #: 1 or 2 — how many skill points, and which shelf it sits on in the shop.
+    tier: int = 1
+    #: Whether holding the key charges it before it fires.
+    charge: bool = False
     icon: str | None = None
     colour: RGB = (142, 107, 214)
 

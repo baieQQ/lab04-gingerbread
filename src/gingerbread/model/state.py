@@ -88,7 +88,21 @@ class Meta:
     #: Skills learned, in learn order.  Once learned, always usable.
     skills: list[str] = field(default_factory=list)
     #: Unspent skill points.  One arrives each day.
-    skill_points: int = 0
+    #: One pool per shelf.  A single pool meant the two-point skills were
+    #: bought by *not* buying one-point ones, so the first tier quietly became
+    #: the thing you skip.  Separate pools make them two independent choices,
+    #: which is what having two slots was for.
+    skill_points_1: int = 0
+    skill_points_2: int = 0
+
+    def points_for(self, tier: int) -> int:
+        return self.skill_points_1 if tier == 1 else self.skill_points_2
+
+    def spend_point(self, tier: int, amount: int = 1) -> None:
+        if tier == 1:
+            self.skill_points_1 -= amount
+        else:
+            self.skill_points_2 -= amount
 
     #: The two carried skills, in slot order.  Two rather than four so the
     #: decision is made *before* the night, in the shop, where the player can
@@ -244,6 +258,12 @@ class State:
 
     #: Ticks during which no new arrival is scheduled (the "hush" event).
     hush_ticks: int = 0
+
+    #: Ticks of 怒潮's mist, which slows every monster on the map.  A field
+    #: rather than a puddle because the design says *the whole map* — a puddle
+    #: big enough would have to be drawn as one, and a screen-filling circle
+    #: reads as a bug rather than as weather.
+    mist_ticks: int = 0
 
     combo: int = 0
     combo_ticks: int = 0

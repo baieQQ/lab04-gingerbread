@@ -42,6 +42,8 @@ class Derived:
     swing_cooldown: float
     move_speed: float
     max_hp: int
+    #: Multiplier on every skill cooldown; 1.0 is unmodified.
+    cooldown_scale: float = 1.0
 
 
 def _totals(meta: "Meta") -> dict[str, float]:
@@ -88,6 +90,12 @@ def derive(state: "State") -> Derived:
 
     arc = C.SWING_ARC + math.radians(totals.get("swing_arc_deg", 0.0))
 
+    # Skill cooldowns, floored at half.  A cap rather than a soft curve because
+    # the player should be able to read "−50%" off the shop and have it be true;
+    # a diminishing return that quietly stops at −38% is a lie in a menu.
+    cooldown_scale = max(C.COOLDOWN_FLOOR,
+                         1.0 - totals.get("cooldown_pct", 0.0))
+
     return Derived(
         attack=int(1 + totals.get("attack", 0.0)),
         light=min(light, C.LIGHT_CAP),
@@ -99,6 +107,7 @@ def derive(state: "State") -> Derived:
                        C.WALK_SPEED_CAP),
         max_hp=min(int(C.PLAYER_START_HP + totals.get("player_hp", 0.0)),
                    C.PLAYER_MAX_HP_CAP),
+        cooldown_scale=cooldown_scale,
     )
 
 

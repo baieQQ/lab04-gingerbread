@@ -28,44 +28,70 @@ from ..specs import SpellSpec
 
 SPELLS: Final[dict[str, SpellSpec]] = {
 
+    # ── 一階 · 一點技能點 ───────────────────────────────────────────
     "bolt": SpellSpec(
-        key="bolt", name="閃電", element="thunder",
-        description="以自己為中心劈下閃電，範圍內全部受傷並被擊退",
-        # Was radius 260 / damage 4 / 20 s.  At those numbers it cleared the
-        # whole field on a cooldown short enough to have back before the field
-        # refilled, so the other three skills were only ever "lightning is not
-        # up yet".  Now it clears what is *around him* — position still matters
-        # — and there is a real gap to survive afterwards.
-        cost=1, cooldown=27.0, duration=0.0,
-        effect="smite",
-        params={"radius": 185.0, "damage": 3.0, "push": 70.0, "shake": 12.0},
+        key="bolt", name="閃電", element="thunder", tier=1,
+        description="以自己為中心劈下閃電，清空範圍內的敵人。長按可蓄力放大範圍",
+        cost=1, cooldown=20.0, duration=0.0,
+        effect="smite", charge=True,
+        params={"radius": 26.0, "radius_max": 50.0, "push": 70.0,
+                "boss": 4.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(
-        key="holy", name="聖光", element="light",
-        description="八秒內照亮全場，隱形的東西全部現形",
+        key="holy", name="聖光", element="light", tier=1,
+        description="八秒內照亮全場，隱形的現形，周圍的敵人每秒被灼燒",
         cost=1, cooldown=22.0, duration=8.0,
         effect="reveal_all",
-        params={"shake": 3.0},
+        params={"radius": 80.0, "burn": 0.5},
         colour=(250, 232, 168)),
 
     "tornado": SpellSpec(
-        key="tornado", name="龍捲風", element="wind",
+        key="tornado", name="龍捲風", element="wind", tier=1,
         description="朝面對的方向放出龍捲風，捲起沿路的怪一起帶走",
         cost=1, cooldown=16.0, duration=5.0,
         effect="twister",
-        params={"speed": 150.0, "radius": 52.0, "hold": 2.5, "shake": 8.0},
+        params={"speed": 150.0, "radius": 52.0, "hold": 2.5},
         colour=(150, 214, 200)),
 
     "cage": SpellSpec(
-        key="cage", name="水牢", element="water",
-        # ``duration`` is how long the bubble waits, not how long it holds —
-        # ``hold`` is that.  A trap's lifetime and its grip are different
-        # numbers and the skill only makes sense when they are.
-        description="在腳下放一顆水泡，踩到的怪會被關住五秒",
-        cost=1, cooldown=11.0, duration=14.0,
-        effect="trap",
-        params={"hold": 5.0, "radius": 34.0, "catches": 1.0, "shake": 2.0},
-        needs_target=False,
+        key="cage", name="水牢", element="water", tier=1,
+        description="罩住腳下一片地方，裡面的敵人動不了；五秒後炸開，全部清空",
+        cost=1, cooldown=18.0, duration=5.0,
+        effect="cage", needs_target=False,
+        params={"radius": 80.0, "push": 90.0, "boss": 6.0},
         colour=(110, 168, 232)),
+
+    # ── 二階 · 兩點技能點 ───────────────────────────────────────────
+    "thunderclap": SpellSpec(
+        key="thunderclap", name="雷鳴", element="thunder", tier=2,
+        description="披上雷電護甲五秒，碰到你的人被電；結束時把累積的電放掉",
+        cost=1, cooldown=26.0, duration=5.0,
+        effect="storm_armour", needs_target=False,
+        params={"radius": 50.0, "burst_radius": 80.0, "boss": 18.0},
+        colour=(196, 168, 255)),
+
+    "blessing": SpellSpec(
+        key="blessing", name="聖癒", element="light", tier=2,
+        description="八秒內照亮全場，並每四秒替兄妹各回一滴血",
+        cost=1, cooldown=30.0, duration=8.0,
+        effect="mend_light", needs_target=False,
+        params={"every": 4.0},
+        colour=(255, 244, 206)),
+
+    "windrun": SpellSpec(
+        key="windrun", name="疾風", element="wind", tier=2,
+        description="六秒內高速移動，撞到誰就把誰撞飛",
+        cost=1, cooldown=24.0, duration=6.0,
+        effect="gale", needs_target=False,
+        params={"speed": 2.4, "push": 120.0, "boss": 6.0},
+        colour=(178, 232, 218)),
+
+    "riptide": SpellSpec(
+        key="riptide", name="怒潮", element="water", tier=2,
+        description="腳下的水壓縮引爆，清空近處；之後全場起霧，敵人走得更慢",
+        cost=1, cooldown=28.0, duration=0.0,
+        effect="surge_wave",
+        params={"radius": 50.0, "mist": 5.0, "push": 110.0, "boss": 20.0},
+        colour=(96, 150, 220)),
 }

@@ -85,17 +85,13 @@ def new_game(seed: int = 0, meta: Meta | None = None,
     state.player.max_hp = derive(state).max_hp
     state.player.hp = state.player.max_hp
 
-    # The campaign hands over one charge of lightning before the first night.
-    # Skills cost sugar and the player has none yet, so without this the skill
-    # keys would do nothing at all for a whole night and the player would learn
-    # that they are not part of the game.
-    if carried.night == 1 and not carried.skills:
-        carried.skills.append("bolt")
-        carried.slots[0] = "bolt"
-
-    # One point per day, granted on arrival, so a survived night always buys a
-    # new option rather than only more numbers.
-    carried.skill_points += 1
+    # A point of each tier per day, granted on arrival — including the first,
+    # so night one is played with a skill the player *chose* rather than one
+    # handed to them.  Nothing is pre-equipped: picking the first two is the
+    # first decision the game asks for, and it is a better opening than being
+    # told what you already have.
+    carried.skill_points_1 += 1
+    carried.skill_points_2 += 1
 
     if carried.mode is Mode.CAMPAIGN:
         _lay_out_day(state)
@@ -172,7 +168,8 @@ def snapshot(state: State) -> dict[str, object]:
         "sugar": state.meta.sugar,
         "upgrades": dict(sorted(state.meta.upgrades.items())),
         "skills": list(state.meta.skills),
-        "skill_points": state.meta.skill_points,
+        "skill_points": [state.meta.skill_points_1,
+                         state.meta.skill_points_2],
         "cooldowns": dict(sorted(state.cooldowns.items())),
         "slots": list(state.meta.slots),
 
@@ -207,6 +204,7 @@ def snapshot(state: State) -> dict[str, object]:
         "fog_scale": repr(round(state.fog_scale, 9)),
         "reveal_ticks": state.reveal_ticks,
         "hush_ticks": state.hush_ticks,
+        "mist_ticks": state.mist_ticks,
         "combo": state.combo,
 
         "stats": [state.stats.arrivals,
@@ -233,7 +231,10 @@ def _player_row(p: Player) -> list[object]:
             repr(round(p.swing_cooldown, 9)), repr(round(p.dash_cooldown, 9)),
             repr(round(p.stun, 9)), repr(round(p.invulnerable, 9)),
             repr(round(p.doused, 9)), repr(round(p.downed, 9)),
-            repr(round(p.guard, 9))]
+            repr(round(p.guard, 9)), p.charging,
+            repr(round(p.charge_time, 9)), repr(round(p.aura, 9)),
+            repr(round(p.haste, 9)), repr(round(p.mending, 9)),
+            repr(round(p.holy, 9))]
 
 
 def _monster_row(m) -> list[object]:
@@ -288,6 +289,14 @@ def parse_action(action: str) -> tuple[str, object]:
         index, _, key = raw.partition(":")
         if index not in ("0", "1") or key not in SPELL_TABLE:
             raise ActionError(f"bad slot assignment {action!r}")
+        # One shelf per slot: L carries a first-tier skill, ；a second-tier one.
+        # Without this the two-point skills simply replace the one-point ones
+        # and the first tier stops existing after night four — the tiers have to
+        # compete with *themselves* to both stay in the game.
+        want = 1 if index == "0" else 2
+        if SPELL_TABLE[key].tier != want:
+            raise ActionError(f"{key} is tier {SPELL_TABLE[key].tier}, "
+                              f"slot {index} takes tier {want}")
         return ("slot", (int(index), key))
 
     for prefix, table, label in (("cast:", SPELL_TABLE, "spell"),
@@ -412,13 +421,18 @@ def _learn(state: State, key: str) -> State:
     if state.phase is not Phase.DAY:
         return state
     spec = SPELL_TABLE[key]
-    if key in state.meta.skills or state.meta.skill_points < spec.cost:
+    if key in state.meta.skills \
+            or state.meta.points_for(spec.tier) < spec.cost:
         return state
 
-    state.meta.skill_points -= spec.cost
+    state.meta.spend_point(spec.tier, spec.cost)
     state.meta.skills.append(key)
-    if None in state.meta.slots:
-        state.meta.slots[state.meta.slots.index(None)] = key
+    # Into its own shelf's slot, if that one is empty.  Filling the first free
+    # slot regardless of tier would put a second-tier skill on L, where the
+    # player could never fire it as designed.
+    home = 0 if spec.tier == 1 else 1
+    if state.meta.slots[home] is None:
+        state.meta.slots[home] = key
     state.emit(f"learned:{key}")
     return state
 
@@ -430,8 +444,8 @@ def _assign_slot(state: State, index: int, key: str) -> State:
     if key not in state.meta.skills:
         return state
     other = 1 - index
-    if state.meta.slots[other] == key:
-        state.meta.slots[other] = state.meta.slots[index]
+    # No swapping between shelves any more — the tiers cannot trade places, so
+    # the only thing an assignment can do is replace what is on its own shelf.
     state.meta.slots[index] = key
     state.emit(f"slot:{index}:{key}")
     return state

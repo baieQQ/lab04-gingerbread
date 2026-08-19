@@ -63,21 +63,37 @@ def test_the_day_sells_permanent_upgrades() -> None:
 
 
 def test_skills_are_bought_and_equipped_in_daylight() -> None:
-    """Rule: the day's other job is choosing what to carry."""
+    """Rule: the day's other job is choosing what to carry.
+
+    Each slot is one tier's shelf — L carries a first-tier skill, ；a
+    second-tier one — and each shelf has its own pool of points, so buying a
+    two-point skill never costs the player a one-point one.
+    """
     state = m.new_game(seed=7)
-    state.meta.skill_points = 2
+    assert state.meta.slots == [None, None], "nothing is handed over"
+    assert state.meta.skill_points_1 == 1
+    assert state.meta.skill_points_2 == 1, "one of each on the first day"
 
-    after = m.apply_action(state, "learn:cage")
-    assert "cage" in after.meta.skills
-    assert after.meta.skill_points == 1, "learning costs a point"
-    assert "cage" in after.meta.slots, "a learned skill should take a free slot"
+    # A second-tier skill lands on the second shelf and spends only that pool.
+    after = m.apply_action(state, "learn:thunderclap")
+    assert after.meta.slots[1] == "thunderclap"
+    assert after.meta.skill_points_2 == 0
+    assert after.meta.skill_points_1 == 1, "the first shelf is untouched"
+    assert "thunderclap" in after.meta.skills
 
-    swapped = m.apply_action(after, "slot:1:cage")
-    assert swapped.meta.slots[1] == "cage"
+    # A first-tier skill lands on the first shelf and cannot go on the second.
+    both = m.apply_action(after, "learn:cage")
+    assert both.meta.slots == ["cage", "thunderclap"]
+    with pytest.raises(m.ActionError):
+        m.apply_action(both, "slot:1:cage")
 
     # Learning it twice must not cost a second point.
-    again = m.apply_action(after, "learn:cage")
-    assert again.meta.skill_points == after.meta.skill_points
+    again = m.apply_action(both, "learn:cage")
+    assert again.meta.skill_points_1 == both.meta.skill_points_1
+
+    # And with the pool empty, a second first-tier skill is refused.
+    broke = m.apply_action(both, "learn:bolt")
+    assert "bolt" not in broke.meta.skills
 
 
 def test_the_day_waits_for_the_player() -> None:
