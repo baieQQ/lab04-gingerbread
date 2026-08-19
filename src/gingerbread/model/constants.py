@@ -88,6 +88,17 @@ GUARD_FADE: Final = 0.12          # seconds the shield takes to appear
 #: Gretel, because the player guarding is standing between her and them.
 GUARD_NUDGE: Final = 26.0
 
+# ── mending ──────────────────────────────────────────────────────────
+#: Chance a kill leaves a heart behind, rolled **only while Hansel is hurt**.
+#: A drop rather than a trickle of regeneration on purpose: regeneration quietly
+#: undoes a mistake while the player is doing nothing, which teaches nothing and
+#: removes the one thing his health bar was for.  A heart on the ground makes
+#: the same recovery a decision — it is lying somewhere, and going to fetch it
+#: means leaving her side, which is the trade this whole game is built on.
+HEART_DROP_CHANCE: Final = 0.14
+#: Half-hearts one restores.
+HEART_VALUE: Final = 1
+
 # ── barricades ───────────────────────────────────────────────────────
 #: Seconds a monster-dropped rock lasts.  Rocks used to be permanent, and a
 #: single barricade monster could spend a night walling the field in: the player

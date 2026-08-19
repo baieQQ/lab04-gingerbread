@@ -418,6 +418,19 @@ class Board:
 
     def _draw_drops(self, state: State, ticks: int) -> None:
         for drop in state.drops:
+            if drop.heal > 0:
+                # A heart, and unmistakably not sugar: this is the one pickup
+                # worth crossing the field for, and it must never be mistaken
+                # for the crystals the player is already sweeping up in passing.
+                bob = math.sin(ticks / 12.0 + drop.x) * 2.0
+                cx, cy = int(drop.x), int(drop.y + bob)
+                F.shadow(self.surface, drop.x, drop.y + 6, 7)
+                for dx in (-3, 3):
+                    pygame.draw.circle(self.surface, P.BLOOD, (cx + dx, cy - 2), 4)
+                pygame.draw.polygon(self.surface, P.BLOOD, [
+                    (cx - 6, cy - 1), (cx + 6, cy - 1), (cx, cy + 7)])
+                pygame.draw.circle(self.surface, P.BONE, (cx - 3, cy - 4), 1)
+                continue
             twinkle = math.sin(ticks / 11.0 + drop.x * 0.3) * 0.5 + 0.5
             colour = P.BLOOD if drop.fake else P.SUGAR_BRIGHT
             F.crystal(self.surface, drop.x, drop.y, 5.0, colour, twinkle)
@@ -733,6 +746,9 @@ class Board:
             elif effect.kind == "guard_hit":
                 pygame.draw.circle(self.surface, P.MOON, centre,
                                    max(1, int(14 * (1 - k))), 2)
+            elif effect.kind == "mend":
+                pygame.draw.circle(self.surface, P.BLOOD, centre,
+                                   max(2, int(26 * (1 - k))), 2)
             elif effect.kind == "ghost_step":
                 # White, and deliberately not the dark print the player leaves.
                 # This is the only thing on screen saying where an invisible

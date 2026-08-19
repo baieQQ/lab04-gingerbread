@@ -226,6 +226,8 @@ class Drop:
     value: int
     #: A baker's decoy: picking it up hurts instead of paying.
     fake: bool = False
+    #: Half-hearts restored instead of sugar paid.  Zero for ordinary sugar.
+    heal: int = 0
 
 
 @dataclass(slots=True)

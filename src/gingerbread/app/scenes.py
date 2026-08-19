@@ -16,6 +16,8 @@ scene sees input.
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from .. import model as m
@@ -114,7 +116,7 @@ class TutorialScene(Scene):
                 "葛蕾特還在等你。",
                 "黑夜裡，燈籠照得到的地方，才是你能守住的地方。",
             ),
-            "按 Enter 開始",
+            "這是你要守住的人。",
         ),
         (
             "移動與面向",
@@ -122,7 +124,7 @@ class TutorialScene(Scene):
                 "使用 [W][A][S][D] 或方向鍵移動。",
                 "最後移動的方向，決定燈籠與揮擊方向。",
             ),
-            "按任一移動鍵繼續",
+            "現在試試看：用 WASD 走幾步。",
         ),
         (
             "燈籠揮擊",
@@ -130,7 +132,7 @@ class TutorialScene(Scene):
                 "按 [J] 或 [Space] 揮動燈籠。",
                 "面向敵人再揮擊，才能守住葛蕾特。",
             ),
-            "按 [J] 或 [Space] 繼續",
+            "現在試試看：面向不同方向揮幾下。",
         ),
         (
             "衝刺閃避",
@@ -138,7 +140,7 @@ class TutorialScene(Scene):
                 "按 [Shift] 衝刺，冷卻 1.4 秒。",
                 "衝刺的那一瞬間撞到誰都不會受傷，是用來穿過去的。",
             ),
-            "按 [Shift] 繼續",
+            "現在試試看：按 Shift 衝出去。",
         ),
         (
             "舉燈守衛",
@@ -146,7 +148,7 @@ class TutorialScene(Scene):
                 "按住 [K] 舉燈守衛，期間任何傷害都扣不到你。",
                 "代價是守衛時揮不了燈——擋得住，但殺不了。",
             ),
-            "按住 [K] 繼續",
+            "現在試試看：按住 K，看那個圈。",
         ),
         (
             "敵人攻擊預兆",
@@ -155,7 +157,7 @@ class TutorialScene(Scene):
                 "站著不動、身上發亮：牠在蓄力遠程攻擊。",
                 "蓄力中被打到就會中斷——過去打斷牠，比站著等牠射划算。",
             ),
-            "按 Enter 繼續",
+            "這些預兆在真的夜晚都會出現。",
         ),
         (
             "準備好了",
@@ -163,15 +165,30 @@ class TutorialScene(Scene):
                 "你已學會移動、揮燈、衝刺、守衛與讀招。",
                 "保護葛蕾特，直到天亮。",
             ),
-            "按 Enter 進入遊戲",
+            "準備好就開始。",
         ),
     )
+
+    #: Seconds a page must be on screen before Enter will turn it.  The player
+    #: is being asked to *try* the thing, not to acknowledge a dialog, and a
+    #: page that can be dismissed on the same keypress that opened it will be.
+    DWELL = 3.0
 
     def __init__(self, app_state, mode: m.Mode) -> None:
         self.g = app_state
         self.mode = mode
         self.page = 0
-        self.wait_release = True
+        self.state: m.State | None = None
+        self.accumulator = 0.0
+        self.ticks = 0
+        self.dwell = 0.0
+
+    def enter(self, app: SceneStack) -> None:
+        app.ui.keyboard = False       # the focus ring must not eat WASD
+        self.state = build_arena()
+
+    def exit(self, app: SceneStack) -> None:
+        app.ui.keyboard = True
 
     def _start_mode(self, app: SceneStack) -> None:
         """只在教學結束或跳過時，才真正建立遊戲 run。"""
@@ -182,44 +199,72 @@ class TutorialScene(Scene):
         else:
             app.replace(PlayScene(self.g))
 
-    def _pressed(self, ui: UI) -> bool:
-        """依目前頁面決定哪一組按鍵可以完成此頁。"""
-        if self.page in (0, 5, 6):
-            return (
-                pygame.K_RETURN in ui.keys
-                or pygame.K_SPACE in ui.keys
-                or ui.up
-            )
+    #: Who appears on each page, as (species or None for Hansel, offset).
+    #: ``None`` is Hansel; ``"gretel"`` is her.  Drawn left to right.
+    CAST = (
+        (("gretel", -70), ("hansel", 70)),                 # 燈火未熄
+        (("hansel", 0),),                                  # 移動與面向
+        (("hansel", -60), ("villager", 70)),               # 燈籠揮擊
+        (("hansel", -60), ("bomber", 80)),                 # 衝刺閃避
+        (("hansel", -60), ("brute", 80)),                  # 舉燈守衛
+        (("archer", -80), ("mirror", 80)),                 # 敵人攻擊預兆
+        (("gretel", -70), ("hansel", 70)),                 # 準備好了
+    )
 
-        if self.page == 1:
-            return any(key in ui.keys for key in (
-                pygame.K_w,
-                pygame.K_a,
-                pygame.K_s,
-                pygame.K_d,
-                pygame.K_UP,
-                pygame.K_DOWN,
-                pygame.K_LEFT,
-                pygame.K_RIGHT,
-            ))
+    def _cast(self, ui: UI, panel: pygame.Rect) -> None:
+        """Draw this page's characters, using the game's own figure code."""
+        row = self.CAST[self.page] if self.page < len(self.CAST) else ()
+        base_y = panel.top + ui.s(118)
+        for who, offset in row:
+            x = panel.centerx + ui.s(offset)
+            if who == "hansel":
+                self._figure(ui, x, base_y, 15, (74, 88, 126), build="tall",
+                             hair=(96, 74, 52))
+                if self.page == 4:            # 守衛：把那個圈畫出來
+                    pygame.draw.circle(ui.surface, P.MOON, (x, base_y),
+                                       ui.s(26), max(2, ui.s(2)))
+                if self.page == 2:            # 揮燈：把那道弧畫出來
+                    pygame.draw.arc(ui.surface, P.EMBER,
+                                    pygame.Rect(x - ui.s(6), base_y - ui.s(34),
+                                                ui.s(76), ui.s(68)),
+                                    -0.8, 0.8, max(2, ui.s(3)))
+            elif who == "gretel":
+                self._figure(ui, x, base_y, 14, (236, 232, 224),
+                             build="small", hair=(214, 176, 92), skirt=True)
+            else:
+                self._monster(ui, x, base_y, who)
 
-        if self.page == 2:
-            return pygame.K_j in ui.keys or pygame.K_SPACE in ui.keys
+    @staticmethod
+    def _figure(ui: UI, x: int, y: int, radius: int, colour, **kw) -> None:
+        from ..view import figures as F
 
-        if self.page == 3:
-            return (
-                pygame.K_LSHIFT in ui.keys
-                or pygame.K_RSHIFT in ui.keys
-            )
+        F.shadow(ui.surface, x, y, ui.s(radius))
+        F.humanoid(ui.surface, x, y, ui.s(radius), colour,
+                   phase=0.6, moving=False, squash=0.0,
+                   facing=(0.0, 1.0), **kw)
 
-        if self.page == 4:
-            return pygame.K_k in ui.keys
+    def _monster(self, ui: UI, x: int, y: int, key: str) -> None:
+        from ..view import figures as F
 
-        return False
+        spec = MONSTERS.get(key)
+        if spec is None:
+            return
+        radius = ui.s(spec.radius * 1.3)
+        F.shadow(ui.surface, x, y, radius)
+        span = max(10, int(radius * 3.4))
+        art = self.g.assets.scaled(f"monster.{key}", (span, span))
+        if art is not None:
+            ui.surface.blit(art, art.get_rect(
+                midbottom=(x, int(y + radius * 0.9))))
+        else:
+            F.humanoid(ui.surface, x, y, radius, spec.colour,
+                       phase=0.2, moving=False, squash=0.0,
+                       facing=(0.0, 1.0))
+        ui.text(spec.name, (x, y + ui.s(26)), "small", P.BONE_DIM, "center")
 
     def _draw_keys(self, ui: UI) -> None:
         """固定顯示的操作速查列。"""
-        cells = Stack.split(ui.box(130, 500, 640, 50), 4, gap=ui.s(10))
+        cells = Stack.split(ui.box(150, 500, 600, 44), 4, gap=ui.s(10))
         controls = (
             ("WASD", "移動"),
             ("J / Space", "揮燈"),
@@ -245,31 +290,48 @@ class TutorialScene(Scene):
             )
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
-        ui.veil(246)
+        # Paint the whole canvas first.  This scene draws the field into the
+        # middle band and floats panels over it, which leaves the HUD strip and
+        # the bottom rail untouched — and since the main loop stopped clearing
+        # the window, "untouched" means whatever was there before, including the
+        # uninitialised white of the very first frame.
+        ui.panel(ui.box(0, 0, 900, m.HEIGHT + HUD_H + RAIL_H), P.VOID, None)
+
+        # The live field, underneath everything.  The page names a key; the
+        # player presses that key and watches it happen, on the real character
+        # under the real rules — rather than reading a description and finding
+        # out whether they understood it during a night that counts.
+        if self.state is not None:
+            step_arena(self, dt, self.g)
+            self.g.board.draw(self.state, self.ticks)
+            board = self.g.board_surface
+            target = (ui.s(m.WIDTH), ui.s(m.HEIGHT))
+            if target != board.get_size():
+                board = pygame.transform.smoothscale(board, target)
+            ui.surface.blit(board, (0, ui.s(HUD_H)))
+        self.dwell += dt
 
         title, lines, objective = self.PAGES[self.page]
         accent = P.BLOOD if self.page == 5 else P.EMBER
 
-        ui.text(
-            "前導教學",
-            (ui.s(MID), ui.s(68)),
-            "title",
-            P.EMBER,
-            "center",
-        )
-
-        panel = ui.box(MID - 305, 118, 610, 350)
+        panel = ui.box(MID - 320, 14, 640, 272)
         ui.panel(panel, P.PANEL, accent, width=ui.s(2), radius=ui.s(8))
 
         ui.text(
             title,
-            (panel.centerx, ui.s(170)),
+            (panel.centerx, ui.s(32)),
             "big",
             accent,
             "center",
         )
 
-        y = 235
+        # The people the words are about, drawn with the same code that draws
+        # them in the game.  A page that says "按 [K] 舉燈守衛" beside a picture
+        # of Hansel with the shield up is teaching one thing; the same sentence
+        # alone is asking the player to imagine it and check later.
+        self._cast(ui, panel)
+
+        y = 190
         for line in lines:
             ui.text(
                 line,
@@ -278,42 +340,40 @@ class TutorialScene(Scene):
                 P.BONE,
                 "center",
             )
-            y += 40
+            y += 28
 
-        task = ui.box(MID - 230, 400, 460, 46)
+        task = ui.box(MID - 250, 296, 500, 40)
         ui.panel(task, P.INK, accent, radius=ui.s(6))
-        ui.text(objective, task.center, "small", accent, "center")
+        ui.text(objective, task.center, "body", accent, "center")
+
+        # The Enter prompt counts itself in.  A greyed prompt with no reason
+        # given reads as broken; a number counting down reads as "not yet".
+        left = self.DWELL - self.dwell
+        last = self.page >= len(self.PAGES) - 1
+        if left > 0:
+            ui.text(f"{left:.0f} 秒後可按 Enter　·　先試試看", (ui.s(MID), ui.s(562)),
+                    "small", P.DISABLED, "center")
+        else:
+            ui.text("Enter　" + ("開始遊戲" if last else "下一頁") + "　·　Esc 關閉引導",
+                    (ui.s(MID), ui.s(560)), "body", P.BONE, "center")
 
         self._draw_keys(ui)
 
-        ui.text(
-            "Esc：跳過教學並直接開始",
-            (ui.s(MID), ui.s(608)),
-            "small",
-            P.MUTED,
-            "center",
-        )
-
-        # Esc 在教學中只做跳過，不開 PauseScene。
         if pygame.K_ESCAPE in ui.keys:
+            self.g.set_onboarding(False)
             self._start_mode(app)
             return
 
-        # 進入頁面時先等待按鍵放開，避免上一頁的 Enter 連跳兩頁。
-        if self.wait_release:
-            if not ui.keys:
-                self.wait_release = False
+        if self.dwell < self.DWELL:
             return
-
-        if not self._pressed(ui):
+        if pygame.K_RETURN not in ui.keys and pygame.K_KP_ENTER not in ui.keys:
             return
 
         if self.page >= len(self.PAGES) - 1:
             self._start_mode(app)
             return
-
         self.page += 1
-        self.wait_release = True
+        self.dwell = 0.0
 
 # ── prologue ─────────────────────────────────────────────────────────
 #: Every line is Hansel's, and none of it is verified.  That is the story: the
@@ -754,6 +814,54 @@ class PlayScene(Scene):
                 P.BONE if live or held else P.BONE_DIM, "center")
 
 
+def build_arena(monster_key: str | None = None) -> "m.State":
+    """A night with the teeth pulled: nothing spawns, nothing can be lost.
+
+    Shared by the walkthrough and the monster rounds so both run the *real*
+    rules.  A hand-written practice loop would drift away from the game the
+    first time either changed, and the drift would be invisible until a player
+    learned something that was no longer true.
+    """
+    from ..model.rules import make_monster
+
+    state = m.new_game(seed=1, meta=m.Meta(night=1, godmode=True))
+    state = m.apply_action(state, "begin_night")
+    state.sleepers.clear()
+    state.monsters.clear()
+    state.surges.clear()
+    state.obstacles.clear()
+    state.boss_key = None
+    state.boss_sent = True
+    state.ticks_total = state.ticks_left = 60 * 60 * 10
+    state.hush_ticks = 60 * 60 * 10
+    if monster_key is not None:
+        # To the side, not above: the banner covers the top of the field, and a
+        # monster spawned up there hides behind the text introducing it.
+        monster = make_monster(state, monster_key,
+                               m.SISTER_X - 280.0, m.SISTER_Y - 30.0)
+        monster.wake = 0.0
+        state.monsters.append(monster)
+    state.player.x, state.player.y = m.SISTER_X, m.SISTER_Y + 110.0
+    return state
+
+
+def step_arena(scene, dt: float, session) -> None:
+    """Run ``scene.state`` forward by one frame of real input."""
+    from .game import MAX_STEPS_PER_FRAME, Session
+
+    steps = 0
+    scene.accumulator += dt
+    while scene.accumulator >= m.FIXED_DT and steps < MAX_STEPS_PER_FRAME:
+        scene.accumulator -= m.FIXED_DT
+        scene.state = m.apply_action(scene.state,
+                                     Session._input_action(scene.state))
+        session.heard.extend(scene.state.events)
+        scene.ticks += 1
+        steps += 1
+    if scene.accumulator > m.FIXED_DT * MAX_STEPS_PER_FRAME:
+        scene.accumulator = 0.0
+
+
 # ── the practice arena ───────────────────────────────────────────────
 #: Nights whose newcomers get a hands-on round rather than a paragraph.  After
 #: night three the player has the vocabulary to read a written line, and by then
@@ -794,50 +902,13 @@ class PracticeScene(Scene):
     # ── one round ────────────────────────────────────────────────────
     def _begin(self) -> None:
         """Build a clean arena holding exactly one monster."""
-        from ..model.rules import make_monster
-
-        key = self.queue[self.index]
-        meta = m.Meta(night=1, godmode=True)
-        state = m.new_game(seed=1, meta=meta)
-        state = m.apply_action(state, "begin_night")
-
-        state.sleepers.clear()
-        state.monsters.clear()
-        state.surges.clear()
-        state.obstacles.clear()       # nothing to hide behind, nothing to learn
-        state.boss_key = None
-        state.boss_sent = True
-        # A very long night with the spawner held shut.  Reusing the real
-        # director and simply muting it keeps every rule identical to the game
-        # the player is being prepared for — a bespoke practice loop would drift
-        # away from the real one the first time either changed.
-        state.ticks_total = state.ticks_left = 60 * 60 * 10
-        state.hush_ticks = 60 * 60 * 10
-
-        monster = make_monster(state, key, m.SISTER_X, m.SISTER_Y - 250.0)
-        monster.wake = 0.0
-        state.monsters.append(monster)
-        state.player.x, state.player.y = m.SISTER_X, m.SISTER_Y + 80.0
-
-        self.state = state
+        self.state = build_arena(self.queue[self.index])
         self.accumulator = 0.0
         self.ticks = 0
         self.cleared = 0.0
 
     def _advance(self, dt: float) -> None:
-        from .game import MAX_STEPS_PER_FRAME, Session
-
-        steps = 0
-        self.accumulator += dt
-        while self.accumulator >= m.FIXED_DT and steps < MAX_STEPS_PER_FRAME:
-            self.accumulator -= m.FIXED_DT
-            self.state = m.apply_action(self.state,
-                                        Session._input_action(self.state))
-            self.g.heard.extend(self.state.events)
-            self.ticks += 1
-            steps += 1
-        if self.accumulator > m.FIXED_DT * MAX_STEPS_PER_FRAME:
-            self.accumulator = 0.0
+        step_arena(self, dt, self.g)
 
     # ── the frame ────────────────────────────────────────────────────
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
@@ -860,6 +931,8 @@ class PracticeScene(Scene):
             surface = pygame.transform.smoothscale(surface, target)
         ui.surface.blit(surface, (0, ui.s(HUD_H)))
 
+        if alive:
+            self._spotlight(ui)
         self._banner(ui)
         self._rail(app, ui, alive)
 
@@ -883,29 +956,65 @@ class PracticeScene(Scene):
 
     # ── presentation ─────────────────────────────────────────────────
     def _banner(self, ui: UI) -> None:
+        """The monster's name and what it does, at a size that can be read.
+
+        This was one line of 13px text in a 54px strip, which is the size the
+        HUD uses for numbers the player already knows the meaning of.  It is the
+        wrong size for the *one* sentence they have never seen before and are
+        about to be tested on.  Name at title size, behaviour at body size, on a
+        plate of its own.
+        """
         spec = MONSTERS[self.queue[self.index]]
-        ui.panel(ui.box(0, 0, 900, HUD_H), P.PANEL, P.LINE)
-        ui.text(f"認識　{spec.name}", (ui.s(24), ui.s(10)), "body", P.EMBER)
+        plate = ui.box(0, 0, 900, 92)
+        ui.panel(plate, P.PANEL, P.LINE)
+        pygame.draw.rect(ui.surface, P.EMBER,
+                         pygame.Rect(plate.left, plate.top, ui.s(4),
+                                     plate.height))
+
+        ui.text(spec.name, (ui.s(28), ui.s(14)), "big", P.EMBER)
         ui.text(f"{self.index + 1} / {len(self.queue)}",
-                (ui.s(876), ui.s(14)), "body", P.MUTED, "right")
-        ui.text(ui.truncate(StoryScene._describe(spec), ui.s(700), "small"),
-                (ui.s(24), ui.s(32)), "small", P.BONE_DIM)
+                (ui.s(872), ui.s(18)), "title", P.MUTED, "right")
+        for i, line in enumerate(
+                ui.wrap(StoryScene._describe(spec), ui.s(800), "body")[:2]):
+            ui.text(line, (ui.s(28), ui.s(52 + i * 22)), "body", P.BONE)
+
+    def _spotlight(self, ui: UI) -> None:
+        """Point at the thing being taught.
+
+        The arena is dark by design, and a monster the player cannot find is a
+        lesson that never starts.  A ring and a bobbing arrow follow it for as
+        long as it lives — this is the one screen where being told exactly where
+        to look is the whole point.
+        """
+        live = [x for x in self.state.monsters if x.hp > 0]
+        if not live:
+            return
+        target = live[0]
+        x = ui.s(target.x)
+        y = ui.s(target.y) + ui.s(HUD_H)
+        bob = math.sin(self.ticks / 9.0) * ui.s(4)
+        radius = ui.s(30) + int(math.sin(self.ticks / 11.0) * ui.s(3))
+        pygame.draw.circle(ui.surface, P.EMBER, (x, y), radius, max(2, ui.s(2)))
+        tip = int(y - ui.s(38) + bob)
+        pygame.draw.polygon(ui.surface, P.EMBER, [
+            (x, tip + ui.s(14)), (x - ui.s(9), tip), (x + ui.s(9), tip)])
 
     def _rail(self, app: SceneStack, ui: UI, alive: bool) -> None:
         top = HUD_H + m.HEIGHT
         ui.panel(ui.box(0, top, 900, RAIL_H), P.INK, P.LINE)
         if alive:
             line = "葛蕾特在這一關不會受傷。放心試，打倒牠就繼續。"
-            colour = P.BONE_DIM
+            colour = P.BONE
         else:
             line = "打倒了。"
             colour = P.EMBER
-        ui.text(line, (ui.s(24), ui.s(top + 26)), "small", colour)
-        ui.text("WASD 移動　·　J 揮燈　·　K 防禦　·　Shift 衝刺",
-                (ui.s(24), ui.s(top + 48)), "small", P.MUTED)
+        ui.text(line, (ui.s(24), ui.s(top + 18)), "body", colour)
+        ui.text("WASD 移動　·　J 揮燈　·　K 防禦　·　Shift 衝刺　·　"
+                "之後可在暫停選單把引導開回來",
+                (ui.s(24), ui.s(top + 46)), "small", P.MUTED)
 
-        rect = ui.box(672, top + 16, 204, 42)
-        if ui.button("skip", rect, "關閉新手引導", "Esc　之後可在暫停選單開回"):
+        rect = ui.box(668, top + 14, 208, 46)
+        if ui.button("skip", rect, "關閉新手引導", "Esc"):
             self._skip(app)
 
 
@@ -953,9 +1062,17 @@ class StoryScene(Scene):
             ui.text("今晚第一次出現", (ui.s(MID), ui.s(y)), "small",
                     P.MUTED, "center")
             y += 26
-            for key in fresh:
-                y = self._row(ui, y, MONSTERS[key].name,
-                              self._describe(MONSTERS[key]), P.VILLAGER)
+            if hands_on:
+                # Just the names.  Six full rows ran off the bottom of the
+                # screen on night one, and every word of them is about to be
+                # said again — properly — in the practice round.
+                ui.text("　·　".join(MONSTERS[k].name for k in fresh),
+                        (ui.s(MID), ui.s(y)), "title", P.VILLAGER, "center")
+                y += 46
+            else:
+                for key in fresh:
+                    y = self._row(ui, y, MONSTERS[key].name,
+                                  self._describe(MONSTERS[key]), P.VILLAGER)
             if boss is not None:
                 spec = BOSSES[boss]
                 # Its title and its weakness, not a sentence of atmosphere.

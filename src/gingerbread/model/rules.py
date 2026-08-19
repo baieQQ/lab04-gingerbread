@@ -303,6 +303,12 @@ def _kill(state: State, target: Monster, *, by_lantern: bool) -> None:
         payout += 1
 
     state.drops.append(Drop(x=target.x, y=target.y, value=payout))
+    # Only ever rolled when he is actually hurt, so a full-health player never
+    # walks past a heart they cannot use and never learns to ignore them.
+    if state.player.hp < derive(state).max_hp \
+            and state.streams.loot.random() < C.HEART_DROP_CHANCE:
+        state.drops.append(Drop(x=target.x + 14.0, y=target.y - 10.0,
+                                value=0, heal=C.HEART_VALUE))
     state.effects.append(Effect("burst", target.x, target.y, 0.45, 0.45))
 
     state.stats.kills += 1
@@ -720,7 +726,15 @@ def _collect_drops(state: State) -> None:
         if g.distance(drop.x, drop.y, p.x, p.y) >= C.DROP_PICKUP_RADIUS:
             remaining.append(drop)
             continue
-        if drop.fake:
+        if drop.heal > 0:
+            stats = derive(state)
+            if p.hp >= stats.max_hp:
+                remaining.append(drop)      # leave it for when it is needed
+                continue
+            p.hp = min(stats.max_hp, p.hp + drop.heal)
+            state.effects.append(Effect("mend", p.x, p.y, 0.5, 0.5))
+            state.emit("mended")
+        elif drop.fake:
             hurt_player(state, drop.value)
             state.emit("decoy")
         else:

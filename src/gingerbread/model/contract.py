@@ -181,7 +181,8 @@ def snapshot(state: State) -> dict[str, object]:
         "bosses": [_boss_row(b) for b in state.bosses],
         "warnings": [[w.spec, repr(round(w.x, 9)), repr(round(w.y, 9)),
                       repr(round(w.left, 9)), w.surge] for w in state.warnings],
-        "drops": [[repr(round(d.x, 9)), repr(round(d.y, 9)), d.value, d.fake]
+        "drops": [[repr(round(d.x, 9)), repr(round(d.y, 9)), d.value, d.fake,
+                   d.heal]
                   for d in state.drops],
         "projectiles": [[repr(round(p.x, 9)), repr(round(p.y, 9)),
                          repr(round(p.vx, 9)), repr(round(p.vy, 9)), p.damage]
