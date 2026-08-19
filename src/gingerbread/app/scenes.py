@@ -58,12 +58,11 @@ class MenuScene(Scene):
         col = _col(ui, MID - 170, 196, 340, 220, gap=12)
         if ui.button("campaign", col.slot(ui.s(60)), "七夜",
                      "撐過七個夜晚，每一夜都有牠們的頭目"):
-            self.g.start(m.Mode.CAMPAIGN)
-            app.replace(PrologueScene(self.g))
+            app.replace(TutorialScene(self.g, m.Mode.CAMPAIGN))
+
         if ui.button("endless", col.slot(ui.s(60)), "無盡",
                      "牠們不會停。撐到你倒下為止"):
-            self.g.start(m.Mode.ENDLESS)
-            app.replace(PlayScene(self.g))
+            app.replace(TutorialScene(self.g, m.Mode.ENDLESS))
         if ui.button("codex", col.slot(ui.s(42)), "圖鑑", "看看你會遇到什麼"):
             app.push(CodexScene(self.g))
 
@@ -76,6 +75,221 @@ class MenuScene(Scene):
         ui.text("方向鍵或滑鼠選擇　·　Enter 確定　·　F11 全螢幕",
                 (ui.s(MID), ui.s(608)), "small", P.MUTED, "center")
 
+
+# ── tutorial ─────────────────────────────────────────────────────────
+class TutorialScene(Scene):
+    """共用於七夜與無盡模式的操作導覽。
+
+    只處理 UI 與按鍵確認；不修改 model、不建立教學專屬戰局。
+    """
+
+    PAGES = (
+        (
+            "燈火未熄",
+            (
+                "葛蕾特還在等你。",
+                "黑夜裡，燈籠照得到的地方，才是你能守住的地方。",
+            ),
+            "按 Enter 開始",
+        ),
+        (
+            "移動與面向",
+            (
+                "使用 [W][A][S][D] 或方向鍵移動。",
+                "最後移動的方向，決定燈籠與揮擊方向。",
+            ),
+            "按任一移動鍵繼續",
+        ),
+        (
+            "燈籠揮擊",
+            (
+                "按 [J] 或 [Space] 揮動燈籠。",
+                "面向敵人再揮擊，才能守住葛蕾特。",
+            ),
+            "按 [J] 或 [Space] 繼續",
+        ),
+        (
+            "衝刺閃避",
+            (
+                "按 [Shift] 衝刺。",
+                "紅色地面圈代表危險範圍；衝出圈外就能閃避。",
+            ),
+            "按 [Shift] 繼續",
+        ),
+        (
+            "舉燈守衛",
+            (
+                "按 [K] 舉燈守衛。",
+                "正面投射物與部分重擊，可以用守衛擋下。",
+            ),
+            "按 [K] 繼續",
+        ),
+        (
+            "敵人攻擊預兆",
+            (
+                "紅色圓圈：離開範圍。",
+                "金色瞄準線：往側邊衝刺，或舉燈守衛。",
+                "敵人發光、後仰或停住：代表牠即將攻擊。",
+            ),
+            "按 Enter 繼續",
+        ),
+        (
+            "準備好了",
+            (
+                "你已學會移動、揮燈、衝刺、守衛與讀招。",
+                "保護葛蕾特，直到天亮。",
+            ),
+            "按 Enter 進入遊戲",
+        ),
+    )
+
+    def __init__(self, app_state, mode: m.Mode) -> None:
+        self.g = app_state
+        self.mode = mode
+        self.page = 0
+        self.wait_release = True
+
+    def _start_mode(self, app: SceneStack) -> None:
+        """只在教學結束或跳過時，才真正建立遊戲 run。"""
+        self.g.start(self.mode)
+
+        if self.mode is m.Mode.CAMPAIGN:
+            app.replace(PrologueScene(self.g))
+        else:
+            app.replace(PlayScene(self.g))
+
+    def _pressed(self, ui: UI) -> bool:
+        """依目前頁面決定哪一組按鍵可以完成此頁。"""
+        if self.page in (0, 5, 6):
+            return (
+                pygame.K_RETURN in ui.keys
+                or pygame.K_SPACE in ui.keys
+                or ui.up
+            )
+
+        if self.page == 1:
+            return any(key in ui.keys for key in (
+                pygame.K_w,
+                pygame.K_a,
+                pygame.K_s,
+                pygame.K_d,
+                pygame.K_UP,
+                pygame.K_DOWN,
+                pygame.K_LEFT,
+                pygame.K_RIGHT,
+            ))
+
+        if self.page == 2:
+            return pygame.K_j in ui.keys or pygame.K_SPACE in ui.keys
+
+        if self.page == 3:
+            return (
+                pygame.K_LSHIFT in ui.keys
+                or pygame.K_RSHIFT in ui.keys
+            )
+
+        if self.page == 4:
+            return pygame.K_k in ui.keys
+
+        return False
+
+    def _draw_keys(self, ui: UI) -> None:
+        """固定顯示的操作速查列。"""
+        cells = Stack.split(ui.box(130, 500, 640, 50), 4, gap=ui.s(10))
+        controls = (
+            ("WASD", "移動"),
+            ("J / Space", "揮燈"),
+            ("Shift", "衝刺"),
+            ("K", "守衛"),
+        )
+
+        for rect, (key, label) in zip(cells, controls):
+            ui.panel(rect, P.PANEL, P.LINE)
+            ui.text(
+                key,
+                (rect.centerx, rect.centery - ui.s(8)),
+                "small",
+                P.EMBER,
+                "center",
+            )
+            ui.text(
+                label,
+                (rect.centerx, rect.centery + ui.s(10)),
+                "tiny",
+                P.BONE_DIM,
+                "center",
+            )
+
+    def update(self, app: SceneStack, ui: UI, dt: float) -> None:
+        ui.veil(246)
+
+        title, lines, objective = self.PAGES[self.page]
+        accent = P.BLOOD if self.page == 5 else P.EMBER
+
+        ui.text(
+            "前導教學",
+            (ui.s(MID), ui.s(68)),
+            "title",
+            P.EMBER,
+            "center",
+        )
+
+        panel = ui.box(MID - 305, 118, 610, 350)
+        ui.panel(panel, P.PANEL, accent, width=ui.s(2), radius=ui.s(8))
+
+        ui.text(
+            title,
+            (panel.centerx, ui.s(170)),
+            "big",
+            accent,
+            "center",
+        )
+
+        y = 235
+        for line in lines:
+            ui.text(
+                line,
+                (panel.centerx, ui.s(y)),
+                "body",
+                P.BONE,
+                "center",
+            )
+            y += 40
+
+        task = ui.box(MID - 230, 400, 460, 46)
+        ui.panel(task, P.INK, accent, radius=ui.s(6))
+        ui.text(objective, task.center, "small", accent, "center")
+
+        self._draw_keys(ui)
+
+        ui.text(
+            "Esc：跳過教學並直接開始",
+            (ui.s(MID), ui.s(608)),
+            "small",
+            P.MUTED,
+            "center",
+        )
+
+        # Esc 在教學中只做跳過，不開 PauseScene。
+        if pygame.K_ESCAPE in ui.keys:
+            self._start_mode(app)
+            return
+
+        # 進入頁面時先等待按鍵放開，避免上一頁的 Enter 連跳兩頁。
+        if self.wait_release:
+            if not ui.keys:
+                self.wait_release = False
+            return
+
+        if not self._pressed(ui):
+            return
+
+        if self.page >= len(self.PAGES) - 1:
+            self._start_mode(app)
+            return
+
+        self.page += 1
+        self.wait_release = True
 
 # ── prologue ─────────────────────────────────────────────────────────
 #: Every line is Hansel's, and none of it is verified.  That is the story: the
