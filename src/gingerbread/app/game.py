@@ -316,6 +316,16 @@ class Game:
         self.book = FontBook(scale=self.scale)
 
     def _open_display(self) -> pygame.Surface:
+        surface = self._request_display()
+        # A display smaller than the layout cannot be letterboxed into — every
+        # ``ui.s()`` collapses to zero and the game draws into nothing.  Seen
+        # for real under WebAssembly, where a fullscreen request returns 1x1.
+        if surface.get_width() < 8 or surface.get_height() < 8:
+            self.fullscreen = False
+            surface = pygame.display.set_mode((CANVAS_W, CANVAS_H))
+        return surface
+
+    def _request_display(self) -> pygame.Surface:
         if self.fullscreen:
             # No ``SCALED``: this class does its own letterboxed scaling, and
             # letting pygame scale as well would apply the transform twice —
