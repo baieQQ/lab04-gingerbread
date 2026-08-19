@@ -553,11 +553,37 @@ class Board:
         pygame.draw.polygon(self.surface, _clamp_colour(colour), points)
 
     def _draw_projectiles(self, state: State) -> None:
+        """The shot, plus the line it is travelling along.
+
+        A dot crossing a dark field is almost impossible to read: by the time
+        the player has seen it and worked out where it is heading, it has
+        arrived.  Drawing the line *ahead* of it — where it will be, not where
+        it has been — turns "something hit me" into "that one is going to hit
+        me unless I move", which is the only version a player can answer.
+
+        The line is computed from the shot's own velocity, so it cannot promise
+        a path the projectile will not take.
+        """
         for shot in state.projectiles:
             pos = (int(shot.x), int(shot.y))
+            speed = math.hypot(shot.vx, shot.vy)
+            if speed > 1.0:
+                ahead = 190.0 / speed
+                tip = (int(shot.x + shot.vx * ahead),
+                       int(shot.y + shot.vy * ahead))
+                back = (int(shot.x - shot.vx * 0.09),
+                        int(shot.y - shot.vy * 0.09))
+                self._fx.fill((0, 0, 0, 0))
+                # Faint forward, brighter behind: the bright end is the arrow,
+                # the faint end is the warning.
+                pygame.draw.line(self._fx, _clamp_colour(P.BLOOD, 70), pos, tip,
+                                 max(1, 2))
+                pygame.draw.line(self._fx, _clamp_colour(P.EMBER, 170), back, pos,
+                                 max(1, 3))
+                self.surface.blit(self._fx, (0, 0))
             pygame.draw.circle(self.surface, F.OUTLINE, pos,
                                int(shot.radius) + 2)
-            pygame.draw.circle(self.surface, P.BONE_DIM, pos, int(shot.radius))
+            pygame.draw.circle(self.surface, P.EMBER_CORE, pos, int(shot.radius))
 
     def _draw_player(self, state: State, ticks: int) -> None:
         from ..model import derive

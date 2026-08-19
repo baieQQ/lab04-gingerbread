@@ -264,6 +264,7 @@ class TutorialScene(Scene):
 
     def _draw_keys(self, ui: UI) -> None:
         """固定顯示的操作速查列。"""
+        ui.text("Esc　關閉新手引導", (ui.s(150), ui.s(572)), "small", P.MUTED)
         cells = Stack.split(ui.box(150, 500, 600, 44), 4, gap=ui.s(10))
         controls = (
             ("WASD", "移動"),
@@ -350,12 +351,15 @@ class TutorialScene(Scene):
         # given reads as broken; a number counting down reads as "not yet".
         left = self.DWELL - self.dwell
         last = self.page >= len(self.PAGES) - 1
+        prompt = ui.box(MID - 190, 552, 380, 40)
         if left > 0:
-            ui.text(f"{left:.0f} 秒後可按 Enter　·　先試試看", (ui.s(MID), ui.s(562)),
-                    "small", P.DISABLED, "center")
+            ui.panel(prompt, P.PANEL, P.LINE)
+            ui.text(f"{left:.0f} 秒後可按 Enter", prompt.center,
+                    "small", P.MUTED, "center")
         else:
-            ui.text("Enter　" + ("開始遊戲" if last else "下一頁") + "　·　Esc 關閉引導",
-                    (ui.s(MID), ui.s(560)), "body", P.BONE, "center")
+            ui.panel(prompt, P.PANEL, P.BONE_DIM)
+            ui.text("Enter　" + ("開始遊戲" if last else "下一頁"),
+                    prompt.center, "body", P.BONE, "center")
 
         self._draw_keys(ui)
 
@@ -744,11 +748,11 @@ class PlayScene(Scene):
         """
         stats = m.derive(state)
         p = state.player
-        cell_w, cell_h, gap = 82, 46, 8
+        cell_w, cell_h, gap = 82, 58, 8
         x0 = 900 - 24 - (cell_w * 4 + gap * 3)
 
         for i, (tag, fixed_name, slot) in enumerate(self.KEYS):
-            rect = ui.box(x0 + i * (cell_w + gap), top + 12, cell_w, cell_h)
+            rect = ui.box(x0 + i * (cell_w + gap), top + 8, cell_w, cell_h)
             name, frac, live, held = fixed_name, 1.0, True, False
 
             if i == 0:                                   # J — the lantern
@@ -775,10 +779,37 @@ class PlayScene(Scene):
                     # full.  That is the press, read back out of the rules.
                     held = left > total - 8
 
-            self._key_cell(ui, rect, tag, name or "—", frac, live, held)
+            self._key_cell(ui, rect, tag, name or "—", frac, live, held, i)
+
+    @staticmethod
+    def _key_icon(ui: UI, rect: pygame.Rect, slot: int, colour) -> None:
+        """A tiny glyph per key, drawn rather than loaded.
+
+        Four shapes the player can tell apart at a glance without reading:
+        the lantern's arc, a shield, and the two skill sigils.  Drawn from
+        primitives so they cost no asset and scale with the display.
+        """
+        cx, cy = rect.centerx, rect.top + ui.s(11)
+        r = ui.s(7)
+        if slot == 0:                                     # J — the swing arc
+            pygame.draw.arc(ui.surface, colour,
+                            pygame.Rect(cx - r, cy - r, r * 2, r * 2),
+                            -1.0, 1.0, max(2, ui.s(2)))
+            pygame.draw.circle(ui.surface, colour, (cx - r, cy), max(1, ui.s(2)))
+        elif slot == 1:                                   # K — a shield
+            pygame.draw.polygon(ui.surface, colour, [
+                (cx, cy - r), (cx + r, cy - r + ui.s(2)),
+                (cx, cy + r), (cx - r, cy - r + ui.s(2))], max(2, ui.s(2)))
+        elif slot == 2:                                   # L — a spark
+            pygame.draw.polygon(ui.surface, colour, [
+                (cx + ui.s(2), cy - r), (cx - r + ui.s(3), cy + ui.s(1)),
+                (cx, cy + ui.s(1)), (cx - ui.s(2), cy + r),
+                (cx + r - ui.s(3), cy - ui.s(1)), (cx, cy - ui.s(1))])
+        else:                                             # ； — a ring
+            pygame.draw.circle(ui.surface, colour, (cx, cy), r, max(2, ui.s(2)))
 
     def _key_cell(self, ui: UI, rect: pygame.Rect, tag: str, name: str,
-                  frac: float, live: bool, held: bool) -> None:
+                  frac: float, live: bool, held: bool, slot: int = 0) -> None:
         # The jolt.  Two pixels, upward — enough to register as a response and
         # small enough that four of them firing at once is not a jumble.
         if held:
@@ -807,10 +838,10 @@ class PlayScene(Scene):
         # colour put a dark grey glyph on top of the cooldown fill, which hid
         # the one character telling the player which key this cell is.
         letter = P.EMBER if held else (P.ARCANE_BRIGHT if live else P.BONE_DIM)
-        gap = ui.book.line_height("small") // 2
-        ui.text(tag, (rect.centerx, rect.centery - gap - ui.s(3)), "body",
+        self._key_icon(ui, rect, slot, letter)
+        ui.text(tag, (rect.centerx, rect.centery + ui.s(2)), "small",
                 letter, "center")
-        ui.text(name, (rect.centerx, rect.centery + gap + ui.s(1)), "small",
+        ui.text(name, (rect.centerx, rect.bottom - ui.s(11)), "small",
                 P.BONE if live or held else P.BONE_DIM, "center")
 
 
