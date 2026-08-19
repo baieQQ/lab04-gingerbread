@@ -19,7 +19,8 @@ from __future__ import annotations
 import pygame
 
 from .. import model as m
-from ..model.content import BOSSES, EVENTS, MONSTERS
+from ..model.content import BEATS, BOSSES, ENDLESS_BEAT, EVENTS, MONSTERS
+from ..model.content import newcomers
 from ..model.content import SPELLS as SPELL_TABLE
 from ..model.content import stage_for
 from ..model.content.elements import ELEMENTS
@@ -170,6 +171,15 @@ class PlayScene(Scene):
         # copies before this guard existed.
         if ui.inert:
             return
+        # The night's card, once, before anything else that day.  Guarded by a
+        # remembered night number rather than a flag so replaying a lost night
+        # shows it again — that is exactly when a player needs reminding what
+        # they are walking back into.
+        if state.phase is m.Phase.DAY and g.story_shown != state.meta.night:
+            g.story_shown = state.meta.night
+            app.push(StoryScene(g))
+            return
+
         if state.phase is m.Phase.SHOP:
             app.push(DawnScene(g))
         elif state.phase in (m.Phase.LOST, m.Phase.VICTORY):
@@ -238,7 +248,10 @@ class PlayScene(Scene):
             seconds = max(0, int(state.timer + 0.999))
         else:
             seconds = -1
-        if seconds >= 0:
+        if state.overtime:
+            # "0:00" while the night refuses to end reads as a stuck clock.
+            ui.text("延長", (ui.s(884), ui.s(13)), "title", P.BOSS, "right")
+        elif seconds >= 0:
             ui.text(f"{seconds // 60}:{seconds % 60:02d}",
                     (ui.s(884), ui.s(13)), "title", accent, "right")
 
@@ -260,7 +273,13 @@ class PlayScene(Scene):
         if state.phase is not m.Phase.NIGHT:
             return
 
-        if state.surge_tell > 0:
+        if state.overtime:
+            live = [b for b in state.bosses if b.hp > 0]
+            who = BOSSES[live[0].spec].name if live and live[0].spec in BOSSES \
+                else "牠"
+            title, sub, colour = ("天亮了，但牠還站著",
+                                  f"打倒{who}才算撐過這一夜", P.BOSS)
+        elif state.surge_tell > 0:
             title, sub, colour = ("一次來三個",
                                   "紅框亮起是預告，紅圈是他們會出現的位置",
                                   P.BLOOD)
@@ -393,39 +412,189 @@ class PlayScene(Scene):
         self.g.act(f"slot:{index}:{nxt}")
 
     # ── night ────────────────────────────────────────────────────────
+    #: The four keys, in the order a hand meets them.  ``None`` for the two
+    #: skill slots means "read the loadout" — the panel below fills them in.
+    KEYS = (("J", "揮燈", None), ("K", "防禦", None),
+            ("L", None, 0), ("；", None, 1))
+
     def _night_bar(self, ui: UI, state: m.State) -> None:
         top = HUD_H + m.HEIGHT
         ui.panel(ui.box(0, top, 900, RAIL_H), P.INK, P.LINE)
 
-        cells = Stack.split(ui.box(250, top + 8, 400, 26), 2, gap=ui.s(10))
-        for slot, (cell, tag) in enumerate(zip(cells, ("L", "；"))):
-            key = state.meta.slots[slot]
-            if not key or key not in SPELL_TABLE:
-                ui.text(f"{tag} —", (cell.centerx, cell.centery), "small",
-                        P.MUTED, "center")
-                continue
-            spec = SPELL_TABLE[key]
-            left = state.cooldowns.get(key, 0)
-            if left > 0:
-                # The bar *is* the readout.  A number counting down asks the
-                # player to read while fighting; a shrinking bar does not.
-                ui.bar(cell, 1.0 - left / max(1, int(spec.cooldown * 60)),
-                       P.ARCANE_BRIGHT)
-                ui.text(f"{tag} {spec.name}", (cell.centerx, cell.centery),
-                        "small", P.MUTED, "center")
-            else:
-                ui.text(f"{tag} {spec.name}　可用", (cell.centerx, cell.centery),
-                        "small", P.ARCANE_BRIGHT, "center")
-
-        # The first night says out loud what the lantern is for.  The darkness
-        # is the game's central rule and nothing on screen was explaining it —
-        # a player who thinks their monitor is broken is not being challenged.
         if state.meta.night == 1 and state.meta.mode is m.Mode.CAMPAIGN:
-            ui.text("提燈照到的地方才看得見。看不見的東西還是在走。",
-                    (ui.s(MID), ui.s(top + 52)), "small", P.EMBER, "center")
+            hint = "提燈照到的地方才看得見。看不見的東西還是在走。"
+            colour = P.EMBER
         else:
-            ui.text("WASD 移動　·　J 揮燈　·　K 防禦　·　Shift 衝刺　·　Esc 選單　·　F9 截圖",
-                    (ui.s(MID), ui.s(top + 52)), "small", P.BONE_DIM, "center")
+            hint = "WASD 移動　·　Shift 衝刺　·　Esc 選單　·　F9 截圖"
+            colour = P.BONE_DIM
+        ui.text(hint, (ui.s(24), ui.s(top + 30)), "small", colour)
+
+        self._keypad(ui, state, top)
+
+    def _keypad(self, ui: UI, state: m.State, top: int) -> None:
+        """Four keys, bottom right, each showing what it is and whether it is up.
+
+        Written as one row of identical cells on purpose.  Attack, guard and the
+        two skills were previously three different shapes in three places — a
+        cooldown bar for skills, nothing at all for the lantern, and a line of
+        prose for the guard — so the player had to *learn* that they were the
+        same kind of thing.  Four boxes in a row says it without a word.
+
+        Everything drawn here is read out of the model.  The jolt on a press is
+        derived from ``swing_anim`` and from a cooldown that has just been set,
+        never from the keyboard: the renderer must not be able to disagree with
+        the rules about whether something fired.
+        """
+        stats = m.derive(state)
+        p = state.player
+        cell_w, cell_h, gap = 82, 46, 8
+        x0 = 900 - 24 - (cell_w * 4 + gap * 3)
+
+        for i, (tag, fixed_name, slot) in enumerate(self.KEYS):
+            rect = ui.box(x0 + i * (cell_w + gap), top + 12, cell_w, cell_h)
+            name, frac, live, held = fixed_name, 1.0, True, False
+
+            if i == 0:                                   # J — the lantern
+                full = max(0.001, stats.swing_cooldown)
+                frac = 1.0 - p.swing_cooldown / full
+                live = p.swing_cooldown <= 0
+                held = p.swing_anim > 0
+            elif i == 1:                                 # K — the guard
+                held = p.guarding
+                live = not p.helpless
+            else:                                        # L / ； — the skills
+                key = state.meta.slots[slot]
+                spec = SPELL_TABLE.get(key) if key else None
+                if spec is None:
+                    name = "—"
+                    frac, live = 1.0, False
+                else:
+                    name = spec.name
+                    total = max(1, int(spec.cooldown * 60))
+                    left = state.cooldowns.get(key, 0)
+                    frac = 1.0 - left / total
+                    live = left <= 0
+                    # Just cast: the cooldown is still within a few frames of
+                    # full.  That is the press, read back out of the rules.
+                    held = left > total - 8
+
+            self._key_cell(ui, rect, tag, name or "—", frac, live, held)
+
+    def _key_cell(self, ui: UI, rect: pygame.Rect, tag: str, name: str,
+                  frac: float, live: bool, held: bool) -> None:
+        # The jolt.  Two pixels, upward — enough to register as a response and
+        # small enough that four of them firing at once is not a jumble.
+        if held:
+            rect = rect.move(0, -ui.s(2))
+
+        edge = P.EMBER if held else (P.ARCANE_BRIGHT if live else P.LINE_HI)
+        ui.panel(rect, P.PANEL_HI if held else P.PANEL, edge)
+
+        # The cooldown fills the cell from the left, behind the text, so the
+        # cell *is* the gauge — a bar somewhere else is one more thing to learn
+        # the meaning of.  Inset so it never eats the border, and kept dark: the
+        # first version was bright enough to swallow the label, which made the
+        # readout least readable exactly while the player was waiting on it.
+        if frac < 1.0:
+            inner = rect.inflate(-ui.s(4), -ui.s(4))
+            inner.width = max(0, int(inner.width * max(0.0, frac)))
+            if inner.width > 0:
+                pygame.draw.rect(ui.surface, P.mix(P.PANEL, P.ARCANE, 0.30),
+                                 inner)
+                pygame.draw.rect(ui.surface, P.ARCANE, inner, max(1, ui.s(1)))
+
+        # The name stays legible whatever the state; only the key letter changes
+        # colour.  Greying out the *name* while it recharges hides the one word
+        # that says what the key is for.
+        # The letter is coloured separately from the border.  Reusing the border
+        # colour put a dark grey glyph on top of the cooldown fill, which hid
+        # the one character telling the player which key this cell is.
+        letter = P.EMBER if held else (P.ARCANE_BRIGHT if live else P.BONE_DIM)
+        gap = ui.book.line_height("small") // 2
+        ui.text(tag, (rect.centerx, rect.centery - gap - ui.s(3)), "body",
+                letter, "center")
+        ui.text(name, (rect.centerx, rect.centery + gap + ui.s(1)), "small",
+                P.BONE if live or held else P.BONE_DIM, "center")
+
+
+# ── the card between nights ──────────────────────────────────────────
+class StoryScene(Scene):
+    """What has happened, and who is new tonight.
+
+    Shown once at the head of each day, before the shop.  Two jobs in one
+    screen, and they belong together: the night's story beat says *why* the
+    village is worse, and the introductions say *how* — the same escalation,
+    told twice, once in prose and once in mechanics.
+
+    Every monster line comes from the registry, not from a paragraph typed
+    here.  A monster whose behaviour is retuned re-explains itself; one written
+    up by hand would go on describing what it used to do.
+    """
+
+    def __init__(self, app_state) -> None:
+        self.g = app_state
+
+    def update(self, app: SceneStack, ui: UI, dt: float) -> None:
+        state = self.g.state
+        night = state.meta.night
+        endless = state.meta.mode is m.Mode.ENDLESS
+        beat = ENDLESS_BEAT if endless else BEATS.get(night, ENDLESS_BEAT)
+
+        ui.veil(250)
+        title = "無盡" if endless else f"第 {night} 夜"
+        ui.text(title, (ui.s(MID), ui.s(52)), "huge", P.BONE, "center")
+        ui.text(beat.heading, (ui.s(MID), ui.s(104)), "title", P.EMBER, "center")
+        ui.paragraph(beat.body, ui.box(MID - 300, 146, 600, 110), "body",
+                     P.BONE_DIM, "center")
+
+        fresh = () if endless else newcomers(night)
+        boss = None if endless else self._boss_key(night)
+        y = 274
+        if fresh or boss:
+            ui.text("今晚第一次出現", (ui.s(MID), ui.s(y)), "small",
+                    P.MUTED, "center")
+            y += 26
+            for key in fresh:
+                y = self._row(ui, y, MONSTERS[key].name,
+                              self._describe(MONSTERS[key]), P.VILLAGER)
+            if boss is not None:
+                spec = BOSSES[boss]
+                # Its title and its weakness, not a sentence of atmosphere.
+                # The one thing a player needs before a boss fight is which
+                # skill to bring, and that is a fact the table already knows.
+                weak = ELEMENTS.get(getattr(spec, "weakness", None) or "")
+                note = spec.title
+                if weak:
+                    note = f"{note}　·　弱點：{weak['name']}"
+                y = self._row(ui, y, f"{spec.name}　（Boss）", note, P.BOSS)
+
+        col = _col(ui, MID - 110, max(y + 18, 560), 220, 60, gap=10)
+        if ui.button("go", col.slot(ui.s(46)), "天亮了") or ui.up:
+            app.pop()
+
+    @staticmethod
+    def _boss_key(night: int) -> str | None:
+        from ..model.content import stage_for
+
+        stage = stage_for(night)
+        return stage.boss if stage else None
+
+    @staticmethod
+    def _describe(spec) -> str:
+        """One line, assembled from what the monster actually does."""
+        parts = [describe_mechanic(spec.behaviour)]
+        parts += [describe_mechanic(t) for t in getattr(spec, "traits", ())]
+        return "　".join(parts)
+
+    def _row(self, ui: UI, y: int, name: str, note: str, accent) -> int:
+        rect = ui.box(MID - 300, y, 600, 46)
+        ui.panel(rect, P.PANEL, P.LINE)
+        pygame.draw.rect(ui.surface, accent,
+                         pygame.Rect(rect.left, rect.top, ui.s(3), rect.height))
+        ui.text(name, (rect.left + ui.s(16), rect.top + ui.s(8)), "body", P.BONE)
+        ui.text(ui.truncate(note, rect.width - ui.s(32), "small"),
+                (rect.left + ui.s(16), rect.top + ui.s(27)), "small", P.MUTED)
+        return y + 54
 
 
 # ── dawn ─────────────────────────────────────────────────────────────

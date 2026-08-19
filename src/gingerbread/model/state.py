@@ -305,6 +305,19 @@ class State:
         return self.phase in (Phase.SHOP, Phase.LOST, Phase.VICTORY)
 
     @property
+    def overtime(self) -> bool:
+        """True when dawn has come and the night's boss is still standing.
+
+        A property rather than a stored flag because it is a *reading* of two
+        other facts, and a stored copy of a reading is a copy that can be wrong.
+        """
+        if self.boss_key is None:
+            return False
+        if self.ticks_left > 0:
+            return False
+        return not self.boss_sent or any(b.hp > 0 for b in self.bosses)
+
+    @property
     def dark(self) -> bool:
         """True once it is night and the fade has begun."""
         return self.phase is Phase.NIGHT and self.dusk > 0

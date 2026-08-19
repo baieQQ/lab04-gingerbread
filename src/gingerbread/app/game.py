@@ -25,6 +25,7 @@ import pygame
 from .. import model as m
 from ..view import palette as P
 from ..view.assets import AssetLibrary
+from ..view.audio import Audio
 from ..view.board import Board
 from ..view.fonts import FontBook
 from ..view.ui import SceneStack, UI
@@ -62,6 +63,13 @@ class Session:
         self.state = m.new_game(seed=seed)
         self.accumulator = 0.0
         self.ticks = 0
+        #: Which night's opening card has already been shown, so it appears
+        #: once per night and not once per frame.
+        self.story_shown = 0
+        #: Events heard since the shell last drained them.  ``apply_action``
+        #: clears ``state.events`` every tick and a frame can run five ticks, so
+        #: anything that only read the newest state would hear one tick in five.
+        self.heard: list[str] = []
 
     def rebuild_view(self) -> None:
         """Rebuild anything that baked pixels at the old scale."""
@@ -76,6 +84,7 @@ class Session:
                          best_endless_kills=self.saved.best_endless_kills)
         self.state = m.new_game(seed=self.seed, meta=carried, mode=mode)
         self.accumulator = 0.0
+        self.story_shown = 0
 
     def restart(self) -> None:
         """Wipe the run and go back to night one."""
@@ -121,6 +130,7 @@ class Session:
         while self.accumulator >= m.FIXED_DT and steps < MAX_STEPS_PER_FRAME:
             self.accumulator -= m.FIXED_DT
             self.state = m.apply_action(self.state, action)
+            self.heard.extend(self.state.events)
             self.ticks += 1
             steps += 1
             if self.state.phase not in (m.Phase.DAY, m.Phase.NIGHT):
@@ -134,6 +144,20 @@ class Session:
 
         if self.state.phase is not state.phase:
             self._remember()
+
+    def drain(self) -> list[str]:
+        """Hand over everything heard since the last call, and forget it."""
+        out, self.heard = self.heard, []
+        return out
+
+    def music_key(self) -> str:
+        """Which track this moment wants."""
+        state = self.state
+        if state.phase is m.Phase.NIGHT:
+            return "boss" if any(b.hp > 0 for b in state.bosses) else "night"
+        if state.phase is m.Phase.DAY:
+            return "day"
+        return "menu"
 
     @staticmethod
     def _input_action(state: m.State) -> str:
@@ -236,6 +260,7 @@ class Game:
         self.seed = seed
 
         self._build_canvas()
+        self.audio = Audio()
         self.session = Session(self.book, seed=seed)
         self.ui = UI(self.canvas, self.book)
         self.ui.scale = self.scale
@@ -297,6 +322,9 @@ class Game:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_F11:
                         self.toggle_fullscreen()
+                    elif event.key == pygame.K_m:
+                        muted = self.audio.toggle_mute()
+                        print(f"[gingerbread] {'靜音' if muted else '開聲音'}")
                     elif event.key == pygame.K_F9:
                         self._screenshot()
                     elif event.key == pygame.K_F10:
@@ -314,6 +342,8 @@ class Game:
             self._clear_bars()
             self.stack.frame(dt, events)
             self.session.cast_from_keys(self.ui.keys)
+            self.audio.consume(self.session.drain())
+            self.audio.music(self.session.music_key())
             pygame.display.flip()
             await asyncio.sleep(0)          # required for the web build
         pygame.quit()

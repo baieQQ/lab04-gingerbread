@@ -120,8 +120,8 @@ class CampaignDirector:
         rules.resolve_warnings(state, dt)
         _fire_pending_event(state)
 
-        if state.hush_ticks > 0:
-            return
+        if state.hush_ticks > 0 or state.overtime:
+            return                  # in overtime it is just the two of them
 
         # Reinforcements from the edges, at a pace that tightens by night —
         # unless this stage names its own, which is how the tutorial gets room
@@ -177,12 +177,27 @@ class CampaignDirector:
     def _boss(self, state: State) -> None:
         if state.boss_sent or state.boss_key is None:
             return
-        if state.ticks_elapsed >= state.boss_tick:
+        # Also sent the moment the clock runs out, whatever its entrance says.
+        # Without this a stage whose boss enters late could reach dawn with the
+        # boss unsent, and the night would wait forever for something that was
+        # never coming.
+        if state.ticks_elapsed >= state.boss_tick or state.ticks_left <= 0:
             state.boss_sent = True
             rules.spawn_boss(state, state.boss_key)
 
     def check_end(self, state: State) -> None:
         if state.ticks_left > 0:
+            return
+        # Dawn is not enough on a boss night: the boss has to be down.
+        #
+        # This is what makes a boss the night's *subject* rather than a large
+        # thing that wandered through it.  Before, a player could keep away from
+        # it for the last thirty seconds and be handed the night anyway, which
+        # meant the correct play against every boss was to ignore it.  Killing
+        # it early does not end the night early either — the clock still has to
+        # run out — so the reward for a fast kill is a quiet field to gather
+        # sugar in, not a shorter night.
+        if state.overtime:
             return
         state.stats.sugar_left = sum(d.value for d in state.drops if not d.fake)
         state.meta.best_night = max(state.meta.best_night, state.meta.night)

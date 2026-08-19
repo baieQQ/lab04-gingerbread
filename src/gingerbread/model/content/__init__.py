@@ -19,10 +19,11 @@ from .maps import ENDLESS_ROTATION, MAPS
 from .monsters import ENDLESS_POOL, MONSTERS
 from .spells import SPELLS
 from .stages import STAGES, stage_for
+from .story import BEATS, ENDLESS_BEAT, Beat
 from .upgrades import ENDLESS_OFFER, SHOP_ORDER, UPGRADES
 
 __all__ = [
-    "BOSSES", "EVENTS", "MAPS", "MONSTERS", "SPELLS", "STAGES", "UPGRADES",
+    "BEATS", "Beat", "BOSSES", "ENDLESS_BEAT", "EVENTS", "MAPS", "MONSTERS", "SPELLS", "STAGES", "UPGRADES",
     "ENDLESS_POOL", "ENDLESS_ROTATION", "ENDLESS_OFFER", "SHOP_ORDER",
     "stage_for", "check",
 ]
@@ -232,3 +233,25 @@ def check() -> None:
            for key, boss in BOSSES.items()
            for i, phase in enumerate(boss.phases)]
     )
+
+
+def newcomers(night: int) -> tuple[str, ...]:
+    """Return the species appearing for the first time on ``night``.
+
+    Derived from the stage table rather than written down beside it.  A list
+    typed by hand goes stale the first time somebody reorders a night's cast,
+    and it goes stale silently — the game would introduce a monster that no
+    longer comes, and say nothing about the one that does.
+    """
+    stage = STAGES.get(night)
+    if stage is None:
+        return ()
+    seen: set[str] = set()
+    for earlier in range(1, night):
+        past = STAGES.get(earlier)
+        if past is not None:
+            seen.update(past.recipe)
+            if past.boss:
+                seen.add(past.boss)
+    fresh = [key for key in dict.fromkeys(stage.recipe) if key not in seen]
+    return tuple(fresh)
