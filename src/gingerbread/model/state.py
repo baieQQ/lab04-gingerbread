@@ -133,6 +133,11 @@ class Meta:
 class Stats:
     """Per-night tally.  Read by the result screen, never by a rule."""
 
+    #: Everyone who turned up tonight, however they arrived — the denominator
+    #: for every rate on the report card.  Counted rather than estimated: a
+    #: night's body count varies by more than a factor of two with the seed, so
+    #: scoring against a fixed expectation would grade the roll, not the player.
+    arrivals: int = 0
     kills: int = 0
     kills_by_lantern: int = 0
     kills_by_spell: int = 0

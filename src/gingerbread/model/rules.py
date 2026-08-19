@@ -858,6 +858,7 @@ def make_monster(state: State, key: str, x: float, y: float, *,
     monster = Monster(spec=key, x=x, y=y, hp=hp, speed=speed,
                       wake=wake, elite=elite)
     escalate_speed(monster, state.elapsed)
+    state.stats.arrivals += 1
     if elite:
         fire_traits("spawn", ("elite_aura",), state, monster)
     return monster

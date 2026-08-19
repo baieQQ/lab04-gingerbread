@@ -30,6 +30,11 @@ from ..view import palette as P
 from ..view.ui import Scene, SceneStack, Stack, UI
 
 #: Layout units.  The board sits between the HUD strip and the hint strip.
+#: The grade badge's colour.  S and A are the lantern's warm gold; D is the
+#: colour everything hostile in this game is drawn in.
+_GRADE_COLOUR = {"S": P.EMBER_CORE, "A": P.EMBER, "B": P.BONE,
+                 "C": P.BONE_DIM, "D": P.BLOOD}
+
 HUD_H = 54
 RAIL_H = 74
 MID = 450
@@ -50,6 +55,19 @@ class MenuScene(Scene):
     def __init__(self, app_state) -> None:
         self.g = app_state
 
+    def _go(self, app: SceneStack, mode) -> None:
+        """Into the walkthrough, or straight into the game if it is switched off.
+
+        The switch is honoured here rather than inside the walkthrough, so a
+        player who turned it off never sees the screen flash up and vanish.
+        """
+        if self.g.onboarding:
+            app.replace(TutorialScene(self.g, mode))
+            return
+        self.g.start(mode)
+        app.replace(PrologueScene(self.g) if mode is m.Mode.CAMPAIGN
+                    else PlayScene(self.g))
+
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
         ui.veil(252)
         ui.text("糖果屋之後", (ui.s(MID), ui.s(92)), "huge", P.EMBER, "center")
@@ -59,13 +77,18 @@ class MenuScene(Scene):
         col = _col(ui, MID - 170, 196, 340, 220, gap=12)
         if ui.button("campaign", col.slot(ui.s(60)), "七夜",
                      "撐過七個夜晚，每一夜都有牠們的頭目"):
-            app.replace(TutorialScene(self.g, m.Mode.CAMPAIGN))
+            self._go(app, m.Mode.CAMPAIGN)
 
         if ui.button("endless", col.slot(ui.s(60)), "無盡",
                      "牠們不會停。撐到你倒下為止"):
-            app.replace(TutorialScene(self.g, m.Mode.ENDLESS))
+            self._go(app, m.Mode.ENDLESS)
         if ui.button("codex", col.slot(ui.s(42)), "圖鑑", "看看你會遇到什麼"):
             app.push(CodexScene(self.g))
+        on = self.g.onboarding
+        if ui.button("guide", col.slot(ui.s(42)),
+                     f"新手引導：{'開' if on else '關'}",
+                     "操作說明與怪物體驗關"):
+            self.g.set_onboarding(not on)
 
         meta = self.g.saved
         best = f"最佳：第 {meta.best_night} 夜"
@@ -112,25 +135,25 @@ class TutorialScene(Scene):
         (
             "衝刺閃避",
             (
-                "按 [Shift] 衝刺。",
-                "紅色地面圈代表危險範圍；衝出圈外就能閃避。",
+                "按 [Shift] 衝刺，冷卻 1.4 秒。",
+                "衝刺的那一瞬間撞到誰都不會受傷，是用來穿過去的。",
             ),
             "按 [Shift] 繼續",
         ),
         (
             "舉燈守衛",
             (
-                "按 [K] 舉燈守衛。",
-                "正面投射物與部分重擊，可以用守衛擋下。",
+                "按住 [K] 舉燈守衛，期間任何傷害都扣不到你。",
+                "代價是守衛時揮不了燈——擋得住，但殺不了。",
             ),
-            "按 [K] 繼續",
+            "按住 [K] 繼續",
         ),
         (
             "敵人攻擊預兆",
             (
-                "紅色圓圈：離開範圍。",
-                "金色瞄準線：往側邊衝刺，或舉燈守衛。",
-                "敵人發光、後仰或停住：代表牠即將攻擊。",
+                "紅色圓圈與箭頭：有人要從那裡出現，箭頭是牠要去的方向。",
+                "站著不動、身上發亮：牠在蓄力遠程攻擊。",
+                "蓄力中被打到就會中斷——過去打斷牠，比站著等牠射划算。",
             ),
             "按 Enter 繼續",
         ),
@@ -731,6 +754,161 @@ class PlayScene(Scene):
                 P.BONE if live or held else P.BONE_DIM, "center")
 
 
+# ── the practice arena ───────────────────────────────────────────────
+#: Nights whose newcomers get a hands-on round rather than a paragraph.  After
+#: night three the player has the vocabulary to read a written line, and by then
+#: a compulsory practice bout before every night is an obstacle, not a lesson.
+PRACTICE_NIGHTS = (1, 2, 3)
+
+
+class PracticeScene(Scene):
+    """Meet each new monster once, alone, with nothing at stake.
+
+    A written description tells the player what a monster *does*; it cannot
+    tell them what it feels like to be walked down by one.  So this is the real
+    game — same rules, same rendering, same keys — with three things removed:
+    Gretel cannot be hurt, no reinforcements arrive, and there is no clock.
+    What is left is one monster and the space to learn it.
+
+    It runs its own ``State``, entirely separate from the run.  Borrowing the
+    campaign's state and putting it back would mean one bug here could corrupt a
+    night the player had already survived; a private state cannot.
+    """
+
+    def __init__(self, app_state, keys: tuple[str, ...]) -> None:
+        self.g = app_state
+        self.queue = [k for k in keys if k in MONSTERS]
+        self.index = 0
+        self.state: m.State | None = None
+        self.accumulator = 0.0
+        self.ticks = 0
+        self.cleared = 0.0            # seconds since the current one fell
+
+    def enter(self, app: SceneStack) -> None:
+        app.ui.keyboard = False       # the focus ring must not eat WASD
+        self._begin()
+
+    def exit(self, app: SceneStack) -> None:
+        app.ui.keyboard = True
+
+    # ── one round ────────────────────────────────────────────────────
+    def _begin(self) -> None:
+        """Build a clean arena holding exactly one monster."""
+        from ..model.rules import make_monster
+
+        key = self.queue[self.index]
+        meta = m.Meta(night=1, godmode=True)
+        state = m.new_game(seed=1, meta=meta)
+        state = m.apply_action(state, "begin_night")
+
+        state.sleepers.clear()
+        state.monsters.clear()
+        state.surges.clear()
+        state.obstacles.clear()       # nothing to hide behind, nothing to learn
+        state.boss_key = None
+        state.boss_sent = True
+        # A very long night with the spawner held shut.  Reusing the real
+        # director and simply muting it keeps every rule identical to the game
+        # the player is being prepared for — a bespoke practice loop would drift
+        # away from the real one the first time either changed.
+        state.ticks_total = state.ticks_left = 60 * 60 * 10
+        state.hush_ticks = 60 * 60 * 10
+
+        monster = make_monster(state, key, m.SISTER_X, m.SISTER_Y - 250.0)
+        monster.wake = 0.0
+        state.monsters.append(monster)
+        state.player.x, state.player.y = m.SISTER_X, m.SISTER_Y + 80.0
+
+        self.state = state
+        self.accumulator = 0.0
+        self.ticks = 0
+        self.cleared = 0.0
+
+    def _advance(self, dt: float) -> None:
+        from .game import MAX_STEPS_PER_FRAME, Session
+
+        steps = 0
+        self.accumulator += dt
+        while self.accumulator >= m.FIXED_DT and steps < MAX_STEPS_PER_FRAME:
+            self.accumulator -= m.FIXED_DT
+            self.state = m.apply_action(self.state,
+                                        Session._input_action(self.state))
+            self.g.heard.extend(self.state.events)
+            self.ticks += 1
+            steps += 1
+        if self.accumulator > m.FIXED_DT * MAX_STEPS_PER_FRAME:
+            self.accumulator = 0.0
+
+    # ── the frame ────────────────────────────────────────────────────
+    def update(self, app: SceneStack, ui: UI, dt: float) -> None:
+        if self.state is None or self.index >= len(self.queue):
+            app.pop()
+            return
+
+        alive = any(x.hp > 0 for x in self.state.monsters)
+        if alive:
+            self._advance(dt)
+        else:
+            self.cleared += dt
+            self._advance(dt)         # let the death effects finish playing
+
+        board = self.g.board
+        board.draw(self.state, self.ticks)
+        surface = self.g.board_surface
+        target = (ui.s(m.WIDTH), ui.s(m.HEIGHT))
+        if target != surface.get_size():
+            surface = pygame.transform.smoothscale(surface, target)
+        ui.surface.blit(surface, (0, ui.s(HUD_H)))
+
+        self._banner(ui)
+        self._rail(app, ui, alive)
+
+        if ui.inert:
+            return
+        if not alive and self.cleared > 1.1:
+            self._next(app)
+
+    def _next(self, app: SceneStack) -> None:
+        self.g.teach(self.queue[self.index])
+        self.index += 1
+        if self.index >= len(self.queue):
+            app.pop()
+            return
+        self._begin()
+
+    def _skip(self, app: SceneStack) -> None:
+        """Leave the walkthroughs behind, for good but not irreversibly."""
+        self.g.set_onboarding(False)
+        app.pop()
+
+    # ── presentation ─────────────────────────────────────────────────
+    def _banner(self, ui: UI) -> None:
+        spec = MONSTERS[self.queue[self.index]]
+        ui.panel(ui.box(0, 0, 900, HUD_H), P.PANEL, P.LINE)
+        ui.text(f"認識　{spec.name}", (ui.s(24), ui.s(10)), "body", P.EMBER)
+        ui.text(f"{self.index + 1} / {len(self.queue)}",
+                (ui.s(876), ui.s(14)), "body", P.MUTED, "right")
+        ui.text(ui.truncate(StoryScene._describe(spec), ui.s(700), "small"),
+                (ui.s(24), ui.s(32)), "small", P.BONE_DIM)
+
+    def _rail(self, app: SceneStack, ui: UI, alive: bool) -> None:
+        top = HUD_H + m.HEIGHT
+        ui.panel(ui.box(0, top, 900, RAIL_H), P.INK, P.LINE)
+        if alive:
+            line = "葛蕾特在這一關不會受傷。放心試，打倒牠就繼續。"
+            colour = P.BONE_DIM
+        else:
+            line = "打倒了。"
+            colour = P.EMBER
+        ui.text(line, (ui.s(24), ui.s(top + 26)), "small", colour)
+        ui.text("WASD 移動　·　J 揮燈　·　K 防禦　·　Shift 衝刺",
+                (ui.s(24), ui.s(top + 48)), "small", P.MUTED)
+
+        rect = ui.box(672, top + 16, 204, 42)
+        if ui.button("skip", rect, "關閉新手引導", "Esc　之後可在暫停選單開回"):
+            self._skip(app)
+
+
 # ── the card between nights ──────────────────────────────────────────
 class StoryScene(Scene):
     """What has happened, and who is new tonight.
@@ -763,6 +941,13 @@ class StoryScene(Scene):
 
         fresh = () if endless else newcomers(night)
         boss = None if endless else self._boss_key(night)
+
+        # Nights one to three hand their newcomers to a practice round instead
+        # of describing them.  Reading "被打死會炸開" and *being* caught by the
+        # blast are not the same lesson, and the second one sticks.
+        hands_on = (night in PRACTICE_NIGHTS and fresh and not endless
+                    and self.g.onboarding)
+
         y = 274
         if fresh or boss:
             ui.text("今晚第一次出現", (ui.s(MID), ui.s(y)), "small",
@@ -782,7 +967,12 @@ class StoryScene(Scene):
                     note = f"{note}　·　弱點：{weak['name']}"
                 y = self._row(ui, y, f"{spec.name}　（Boss）", note, P.BOSS)
 
-        col = _col(ui, MID - 110, max(y + 18, 560), 220, 60, gap=10)
+        col = _col(ui, MID - 150, max(y + 18, 556), 300, 60, gap=10)
+        if hands_on:
+            if ui.button("go", col.slot(ui.s(46)), "先認識他們",
+                         "一隻一隻試，葛蕾特不會受傷"):
+                app.replace(PracticeScene(self.g, fresh))
+            return
         if ui.button("go", col.slot(ui.s(46)), "天亮了") or ui.up:
             app.pop()
 
@@ -832,28 +1022,38 @@ class DawnScene(Scene):
         ui.text("天亮了，村民又變回和善的樣子。",
                 (ui.s(MID), ui.s(162)), "small", P.BONE_DIM, "center")
 
-        s = state.stats
-        rows = [
-            ("揮燈擊退", f"{s.kills_by_lantern} 人", False, True),
-            ("技能清場", f"{s.kills_by_spell} 人", False, s.kills_by_spell > 0),
-            ("撿到糖霜", f"{s.sugar_picked} 顆", False, True),
-            ("留在雪地上", f"{s.sugar_left} 顆，天亮就沒了",
-             s.sugar_left > 0, s.sugar_left > 0),
-            ("摸到葛蕾特", f"{s.reached_sister} 人", s.reached_sister > 0, True),
-            ("你倒下", f"{s.downs} 次", s.downs > 0, s.downs > 0),
-        ]
-        y = 220
-        for label, value, bad, shown in rows:
-            if not shown:
-                continue
-            ui.text(label, (ui.s(MID - 190), ui.s(y)), "small", P.BONE_DIM)
-            ui.text("→", (ui.s(MID - 44), ui.s(y)), "small", P.EMBER_DARK)
-            ui.text(value, (ui.s(MID - 14), ui.s(y)), "small",
-                    P.BLOOD if bad else P.BONE)
-            y += 30
+        report = m.grade_night(state)
+
+        # The grade, and immediately underneath it the reason.  A letter on its
+        # own teaches nothing; the player reads "C" and learns only that they
+        # are being judged.  Naming the weakest line turns the same letter into
+        # an instruction for tomorrow night.
+        badge = ui.box(MID - 46, 190, 92, 74)
+        ui.panel(badge, P.PANEL, _GRADE_COLOUR.get(report.grade, P.BONE))
+        ui.text(report.grade, (badge.centerx, badge.top + ui.s(8)), "huge",
+                _GRADE_COLOUR.get(report.grade, P.BONE), "center")
+        ui.text(f"{report.points}/{report.out_of}",
+                (badge.centerx, badge.bottom - ui.s(20)), "small",
+                P.MUTED, "center")
+        if report.weakest is not None:
+            ui.text(f"最弱的一環：{report.weakest.label}　{report.weakest.detail}",
+                    (ui.s(MID), ui.s(274)), "small", P.EMBER, "center")
+
+        y = 306
+        for line in report.lines:
+            ui.text(line.label, (ui.s(MID - 210), ui.s(y)), "small", P.BONE_DIM)
+            bar = ui.box(MID - 150, y + 4, 200, 10)
+            ui.bar(bar, line.fraction,
+                   P.BLOOD if line.fraction < 0.4 else
+                   (P.EMBER if line.fraction < 0.85 else P.GOOD))
+            ui.text(f"{line.points}/{line.out_of}",
+                    (ui.s(MID + 66), ui.s(y)), "small", P.BONE)
+            ui.text(ui.truncate(line.detail, ui.s(190), "small"),
+                    (ui.s(MID + 110), ui.s(y)), "small", P.MUTED)
+            y += 26
 
         ui.text(f"糖霜 {state.meta.sugar}　·　明天會再多一點技能點",
-                (ui.s(MID), ui.s(y + 26)), "body", P.SUGAR, "center")
+                (ui.s(MID), ui.s(y + 18)), "body", P.SUGAR, "center")
 
         if ui.button("next", ui.box(MID - 120, 524, 240, 46), "進入下一個白天"):
             self.g.act("next_night")
@@ -954,6 +1154,11 @@ class PauseScene(Scene):
             app.pop()
         if ui.button("codex", col.slot(ui.s(44)), "圖鑑"):
             app.push(CodexScene(self.g))
+        on = self.g.onboarding
+        if ui.button("guide", col.slot(ui.s(44)),
+                     f"新手引導：{'開' if on else '關'}",
+                     "怪物體驗關與操作說明"):
+            self.g.set_onboarding(not on)
         if ui.button("full", col.slot(ui.s(44)),
                      "切換視窗" if self.game.fullscreen else "切換全螢幕", "F11"):
             self.game.toggle_fullscreen()

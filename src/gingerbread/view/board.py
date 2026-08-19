@@ -183,10 +183,11 @@ class Board:
             self._draw_paths(state)
             self._draw_sleepers(state)
 
+        self._draw_puddles(state, ticks)
         self._draw_drops(state, ticks)
         self._draw_hazards(state, ticks)
         self._draw_sister(state, ticks)
-        self._draw_monsters(state)
+        self._draw_monsters(state, ticks)
         self._draw_projectiles(state)
         self._draw_player(state, ticks)
         self._draw_effects(state)
@@ -294,20 +295,28 @@ class Board:
     def _person(self, key: str, x: float, y: float, radius: float,
                 colour, *, moving: bool, squash: float = 0.0,
                 facing=(0.0, 1.0), build: str | None = None,
-                hair=None, skirt: bool = False,
+                hair=None, skirt: bool = False, ticks: int = 0,
+                speed: float = 0.0,
                 lamp: tuple[float, float] | None = None) -> None:
         """Draw a figure: sprite if the art exists, else the drawn humanoid."""
-        art = self.assets.image(f"monster.{key}") if key else None
+        # Scaled to the radius the *rules* use, never blitted at native size.
+        # Art arrives at whatever resolution it was drawn at — the four that
+        # landed first are 600 px tall for a monster the rules give a radius of
+        # eleven — so a raw blit puts a sprite sixty times too big on the field.
+        span = max(8, int(radius * 3.4))
+        art = self.assets.scaled(f"monster.{key}", (span, span)) if key else None
         F.shadow(self.surface, x, y, radius)
         if art is not None:
-            self.surface.blit(art, art.get_rect(center=(int(x), int(y))))
+            # Lifted so the feet sit on the shadow rather than the waist.
+            self.surface.blit(art, art.get_rect(
+                midbottom=(int(x), int(y + radius * 0.9))))
             return
         rim = None
         if lamp is not None:
             rim = (lamp[0] - x, lamp[1] - y)
         F.humanoid(self.surface, x, y, radius, colour,
                    build=build or "adult",
-                   phase=F.walk_phase(x, y), moving=moving,
+                   phase=F.walk_phase(ticks, speed, x, y), moving=moving,
                    squash=squash, facing=facing, hair=hair,
                    skirt=skirt, rim_from=rim)
 
@@ -328,7 +337,7 @@ class Board:
             self.surface.blit(label, label.get_rect(
                 center=(int(x), int(y + spec.radius + 22))))
 
-    def _draw_monsters(self, state: State) -> None:
+    def _draw_monsters(self, state: State, ticks: int) -> None:
         for monster in state.monsters:
             spec = MONSTERS.get(monster.spec)
             if spec is None:
@@ -337,12 +346,22 @@ class Board:
                 self._person(monster.spec, monster.x, monster.y, spec.radius,
                              P.ASLEEP, moving=False,
                              build=_BUILD.get(spec.silhouette),
+                             ticks=ticks, speed=monster.speed,
                              lamp=self._lamp(state))
+                continue
+
+            # Fully faded means *not drawn*.  ``faded`` was computed every tick
+            # by the trait and read by nobody, so the one monster whose entire
+            # identity is being unseen was rendered at full opacity.  Its
+            # footprints are effects, so they keep showing after this skips it.
+            if monster.faded >= 0.999:
                 continue
 
             colour = P.BONE if monster.hit_flash > 0 else spec.colour
             if monster.frozen:
                 colour = P.mix(spec.colour, P.MOON, 0.55)
+            elif monster.faded > 0:
+                colour = P.mix(colour, P.INK, monster.faded)
 
             # They are walking toward Gretel, so that is where they look.
             fx = C.SISTER_X - monster.x
@@ -354,6 +373,7 @@ class Board:
                          squash=min(1.0, monster.hit_flash / 0.12),
                          facing=(fx / length, fy / length),
                          build=_BUILD.get(spec.silhouette),
+                         ticks=ticks, speed=monster.speed,
                          lamp=self._lamp(state))
 
             if monster.elite:
@@ -376,6 +396,7 @@ class Board:
                          moving=boss.active,
                          squash=min(1.0, boss.hit_flash / 0.12),
                          facing=(fx / length, fy / length), build="tall",
+                         ticks=ticks, speed=boss.speed,
                          lamp=self._lamp(state))
             pygame.draw.circle(self.surface, P.BOSS,
                                (int(boss.x), int(boss.y)),
@@ -400,6 +421,38 @@ class Board:
             twinkle = math.sin(ticks / 11.0 + drop.x * 0.3) * 0.5 + 0.5
             colour = P.BLOOD if drop.fake else P.SUGAR_BRIGHT
             F.crystal(self.surface, drop.x, drop.y, 5.0, colour, twinkle)
+
+    #: Ground colour per puddle kind.  Mud slows, syrup slows harder, fire burns.
+    _GROUND = {"mud": (74, 58, 38), "syrup": (108, 70, 34), "fire": (176, 70, 34)}
+
+    def _draw_puddles(self, state: State, ticks: int) -> None:
+        """Draw what has been left on the ground.
+
+        This layer did not exist.  The rules have always slowed anything
+        standing in mud, and the mudling has always laid a trail of it — but
+        nothing drew a single pixel of it, so the player walked into an
+        invisible tar pit and concluded the controls had gone wrong.  A rule the
+        player cannot see is not a mechanic, it is a fault.
+        """
+        if not state.puddles:
+            return
+        self._fx.fill((0, 0, 0, 0))
+        for pool in state.puddles:
+            base = self._GROUND.get(pool.kind, self._GROUND["mud"])
+            # A finite pool dries out; fading it makes the edge of its
+            # usefulness visible rather than something discovered by dying.
+            left = 1.0 if pool.life < 0 else max(0.15, min(1.0, pool.life / 6.0))
+            radius = max(3, int(pool.radius))
+            pygame.draw.circle(self._fx, _clamp_colour(base, 150 * left),
+                               (int(pool.x), int(pool.y)), radius)
+            pygame.draw.circle(self._fx, _clamp_colour(base, 215 * left),
+                               (int(pool.x), int(pool.y)), radius, 2)
+            if pool.kind == "fire":
+                flare = 0.5 + math.sin(ticks / 5.0 + pool.x) * 0.5
+                pygame.draw.circle(
+                    self._fx, _clamp_colour(P.EMBER, 130 * flare * left),
+                    (int(pool.x), int(pool.y)), max(2, int(radius * 0.45)))
+        self.surface.blit(self._fx, (0, 0))
 
     def _draw_hazards(self, state: State, ticks: int) -> None:
         """The twister and the water trap.
@@ -540,7 +593,8 @@ class Board:
             # Two seconds into the first night the player can already tell which
             # shape is his without reading anything.
             F.humanoid(self.surface, p.x, p.y, C.PLAYER_RADIUS, body,
-                       build="tall", phase=F.walk_phase(p.x, p.y),
+                       build="tall",
+                       phase=F.walk_phase(ticks, stats.move_speed, p.x, p.y),
                        moving=True, squash=0.0,
                        facing=(p.face_x, p.face_y), hair=(96, 74, 52),
                        rim_from=(p.face_x, p.face_y))
@@ -679,6 +733,15 @@ class Board:
             elif effect.kind == "guard_hit":
                 pygame.draw.circle(self.surface, P.MOON, centre,
                                    max(1, int(14 * (1 - k))), 2)
+            elif effect.kind == "ghost_step":
+                # White, and deliberately not the dark print the player leaves.
+                # This is the only thing on screen saying where an invisible
+                # thing went, so it must not read as the player's own trail.
+                self._fx.fill((0, 0, 0, 0))
+                pygame.draw.ellipse(
+                    self._fx, _clamp_colour(P.SUGAR_BRIGHT, 190 * k),
+                    pygame.Rect(int(effect.x) - 4, int(effect.y) - 3, 8, 6))
+                self.surface.blit(self._fx, (0, 0))
             elif effect.kind == "taken":
                 pygame.draw.circle(self.surface, P.BLOOD, centre,
                                    max(1, int(44 * (1 - k))), 3)

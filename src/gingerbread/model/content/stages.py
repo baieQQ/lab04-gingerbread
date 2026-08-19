@@ -21,8 +21,10 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     1: StageSpec(
         night=1, map_key="village_square",
+        # 投石怪與泥巴怪照設定文件從第一夜就在場。投石怪原本一個關卡都沒排
+        # 到——寫好了、註冊了、圖鑑查得到，但玩家永遠遇不到。
         recipe=("villager", "villager", "child", "mirror",
-                "villager", "splitter"),
+                "mudling", "slinger", "villager", "splitter"),
         surges=(32.0,),
         boss=None, elites=0,
         # The tutorial is paced by hand.  On the default curve a careful player
@@ -43,8 +45,9 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     3: StageSpec(
         night=3, map_key="forest_edge",
+        # 盔甲怪與自爆怪照設定文件從第三夜開始，原本要到第四夜。
         recipe=("archer", "faint", "villager", "mudling", "brute",
-                "archer", "child", "mirror"),
+                "armoured", "bomber", "child", "mirror"),
         surges=(15.0, 30.0, 44.0),
         boss="shade_archer", elites=1,
         tagline="敵人已經不只是躲在森林裡。"),

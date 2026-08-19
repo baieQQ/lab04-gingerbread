@@ -208,7 +208,8 @@ def snapshot(state: State) -> dict[str, object]:
         "hush_ticks": state.hush_ticks,
         "combo": state.combo,
 
-        "stats": [state.stats.kills, state.stats.kills_by_lantern,
+        "stats": [state.stats.arrivals,
+                  state.stats.kills, state.stats.kills_by_lantern,
                   state.stats.kills_by_spell, state.stats.reached_sister,
                   state.stats.sugar_picked, state.stats.damage_taken,
                   state.stats.downs, state.stats.best_combo],

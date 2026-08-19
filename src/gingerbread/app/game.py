@@ -59,6 +59,15 @@ class Session:
         self.board = Board(self.board_surface, self.book, self.assets)
         self.board.warm_up()
 
+        #: Monsters the player has already been walked through, kept across
+        #: runs.  A practice round is worth seeing once; on the fourth run it is
+        #: an obstacle between the player and the game.
+        self.taught: set[str] = set()
+        #: Whether the walkthroughs run at all.  **On by default**, and it stays
+        #: on until the player says otherwise: a first-time player never finds a
+        #: setting they do not know they need, so the help has to be the thing
+        #: they turn *off*, not the thing they turn on.
+        self.onboarding = True
         self.saved = self._load()
         self.state = m.new_game(seed=seed)
         self.accumulator = 0.0
@@ -145,6 +154,23 @@ class Session:
         if self.state.phase is not state.phase:
             self._remember()
 
+    def set_onboarding(self, on: bool) -> None:
+        """Turn the walkthroughs on or off, and remember it across runs."""
+        if self.onboarding != on:
+            self.onboarding = on
+            self._save()
+
+    def teach(self, key: str) -> None:
+        """Mark a monster as introduced, and write it down immediately.
+
+        Saved on the spot rather than at the end of the night: a player who
+        quits during the practice has still seen it, and being shown it again
+        because they closed the window is the exact annoyance this guards.
+        """
+        if key not in self.taught:
+            self.taught.add(key)
+            self._save()
+
     def drain(self) -> list[str]:
         """Hand over everything heard since the last call, and forget it."""
         out, self.heard = self.heard, []
@@ -226,6 +252,8 @@ class Session:
         """
         try:
             raw = json.loads(SAVE_PATH.read_text(encoding="utf-8"))
+            self.taught = {str(k) for k in raw.get("taught", [])}
+            self.onboarding = bool(raw.get("onboarding", True))
             return m.Meta(
                 best_night=int(raw.get("best_night", 0)),
                 best_endless_ticks=int(raw.get("best_endless_ticks", 0)),
@@ -240,6 +268,8 @@ class Session:
                 "best_night": self.saved.best_night,
                 "best_endless_ticks": self.saved.best_endless_ticks,
                 "best_endless_kills": self.saved.best_endless_kills,
+                "taught": sorted(self.taught),
+                "onboarding": self.onboarding,
             }), encoding="utf-8")
         except OSError:
             pass                      # a read-only home directory is not fatal
@@ -389,8 +419,15 @@ class Game:
                 self.window.fill(P.VOID, bar)
 
     def _toggle_pause(self) -> None:
-        from .scenes import PauseScene
+        from .scenes import PauseScene, PracticeScene, TutorialScene
 
+        # Escape belongs to whatever is teaching, if anything is.  Opening a
+        # pause menu over a walkthrough would make the one key that obviously
+        # means "I have seen enough" do something else instead.
+        if isinstance(self.stack.top, (TutorialScene, PracticeScene)):
+            self.session.set_onboarding(False)
+            self.stack.pop()
+            return
         if isinstance(self.stack.top, PauseScene):
             self.stack.pop()
         else:

@@ -20,6 +20,8 @@ import array
 import math
 import os
 import random
+import shutil
+import subprocess
 import wave
 
 RATE = 44100
@@ -100,11 +102,36 @@ RECIPES = {
 
 
 def write(path: str, samples: array.array) -> None:
-    with wave.open(path, "wb") as out:
+    """Write ``samples`` to ``path``, as OGG where that is possible.
+
+    **The web build rejects WAV outright.**  pygbag stops packing with
+    "has a common unsupported format" the moment it meets one, and it stops
+    *after* writing the archives but *before* writing ``index.html`` — so the
+    output folder looks half-plausible and the browser sits on a loading
+    screen forever.  That cost an afternoon; it is not allowed to cost another.
+
+    So WAV is only ever an intermediate here.  If ``ffmpeg`` is missing the
+    files still get written, because a silent game is better than no game, but
+    the warning says exactly what will break.
+    """
+    raw = path if path.endswith(".wav") else path[: path.rfind(".")] + ".wav"
+    with wave.open(raw, "wb") as out:
         out.setnchannels(1)
         out.setsampwidth(2)
         out.setframerate(RATE)
         out.writeframes(samples.tobytes())
+
+    if shutil.which("ffmpeg") is None:
+        print(f"[make_sfx] 沒有 ffmpeg，只能留下 {os.path.basename(raw)}；"
+              f"網頁版建置會失敗，請手動轉成 .ogg")
+        return
+    ogg = raw[:-4] + ".ogg"
+    result = subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-i", raw,
+         "-c:a", "libvorbis", "-q:a", "2", ogg],
+        capture_output=True)
+    if result.returncode == 0:
+        os.remove(raw)
 
 
 def ambience(seconds: float = 12.0) -> array.array:
@@ -132,6 +159,6 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(HERE, "assets", "music"), exist_ok=True)
     for name, (duration, layers) in sorted(RECIPES.items()):
         write(os.path.join(OUT, f"{name}.wav"), render(duration, layers))
-    write(os.path.join(HERE, "assets", "music", "night.wav"), ambience())
     print(f"寫出 {len(RECIPES)} 個暫用音效 -> {OUT}")
-    print("寫出 1 個暫用夜晚環境音 -> assets/music/night.wav")
+    print("音樂不在這裡產生：assets/music/ 放的是真的曲子，"
+          "由 view/audio.py 的 MUSIC 表指定")

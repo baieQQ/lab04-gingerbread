@@ -125,7 +125,11 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         key="faint", name="隱形怪",
         hp=2, speed=46.0, radius=10.0, sugar=3,
         traits=("fades",),
-        params={"fade": 0.86},
+        # 1.0, not 0.86: at 0.86 it was a faint smudge, which asks the player to
+        # squint at the dark rather than to read the ground.  Gone entirely, and
+        # tracked by its prints, is both fairer and more frightening.
+        params={"fade": 1.0, "step_every": 0.26, "step_life": 2.4,
+                "step_spread": 5.0},
         weakness="light",
         colour=(96, 104, 128), silhouette="villager",
         step_hz=620.0),

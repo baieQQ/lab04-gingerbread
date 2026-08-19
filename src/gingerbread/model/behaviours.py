@@ -366,19 +366,44 @@ def shy_of_light(state: State, monster: Monster, payload: float = 0.0) -> None:
 
 
 @trait("fades", "tick", label="隱形",
-       note="平常幾乎看不見；被光照到就現形",
-       params={"fade": (0.86, "看不見的程度，1 是完全透明")})
+       note="完全看不見，只有地上的白色腳印會出賣牠；被光照到就現形",
+       params={"fade": (1.0, "看不見的程度，1 是完全透明"),
+               "step_every": (0.26, "多久留一個腳印"),
+               "step_life": (2.4, "腳印多久淡掉"),
+               "step_spread": (5.0, "左右腳分開多遠")})
 def fades(state: State, monster: Monster, payload: float = 0.0) -> None:
-    """Nearly invisible until light falls on it.
+    """Gone from sight until light falls on it — but it still leaves prints.
 
-    The counter is the light spell, but the *free* counter is paying attention —
-    it is faint, not absent, so a player who is watching can still find it.
-    Something genuinely invisible would only ever feel unfair.
+    Invisible *and* untraceable would be unfair, so the body goes and the tracks
+    stay: white footprints pressed into the ground behind it, one every stride.
+    That turns finding it from a perception test into a reading test, which is a
+    thing a player can get better at.
+
+    The prints are ordinary world objects, so the lantern has to reach them.
+    That is the point rather than a limitation: this is the one monster that
+    makes the player sweep the light across empty ground.
     """
     spec = _spec(monster)
     lit = (is_lit(state, monster.x, monster.y, lantern_only=True)
            or state.reveal_ticks > 0)
     monster.faded = 0.0 if lit else param(spec, "fades", "fade")
+    if lit or monster.stunned > 0 or monster.buried > 0:
+        return
+
+    every = param(spec, "fades", "step_every")
+    monster.memory["step"] = monster.memory.get("step", 0.0) + C.FIXED_DT
+    if monster.memory["step"] < every:
+        return
+    monster.memory["step"] = 0.0
+    # Left and right alternate, offset across the direction of travel, so the
+    # trail reads as something walking rather than as a dotted line.
+    monster.memory["foot"] = -monster.memory.get("foot", 1.0)
+    dx, dy = g.normalise(C.SISTER_X - monster.x, C.SISTER_Y - monster.y)
+    side = param(spec, "fades", "step_spread") * monster.memory["foot"]
+    state.effects.append(Effect(
+        "ghost_step", monster.x - dy * side, monster.y + dx * side,
+        param(spec, "fades", "step_life"),
+        param(spec, "fades", "step_life")))
 
 
 @trait("mud_trail", "tick", label="留泥",
@@ -419,7 +444,8 @@ def frenzy(state: State, monster: Monster, payload: float = 0.0) -> None:
 # ── traits: death ────────────────────────────────────────────────────
 @trait("splits", "death", label="分裂",
        note="死掉時裂成幾隻小的，要全部清掉才算",
-       params={"split_count": (2.0, "裂成幾隻")})
+       params={"split_count": (2.0, "裂成幾隻"),
+               "split_delay": (0.2, "裂開多久之後小的才會動")})
 def splits(state: State, monster: Monster, payload: float = 0.0) -> None:
     """Break into smaller monsters when killed.
 
@@ -438,7 +464,13 @@ def splits(state: State, monster: Monster, payload: float = 0.0) -> None:
             spec=child_key,
             x=g.clamp(monster.x + math.cos(angle) * 20, 8, C.WIDTH - 8),
             y=g.clamp(monster.y + math.sin(angle) * 20, 8, C.HEIGHT - 8),
-            hp=child.hp, speed=child.speed, armour=int(child.param("armour"))))
+            hp=child.hp, speed=child.speed,
+            # A beat before they move.  Splitting used to hand the player two
+            # live monsters on the same frame the parent died, inside the swing
+            # they had already committed to — the punishment landed before the
+            # cause was legible.  Two tenths of a second is enough to read it.
+            wake=param(spec, "splits", "split_delay"),
+            armour=int(child.param("armour"))))
     state.effects.append(Effect("split", monster.x, monster.y, 0.4, 0.4))
     state.emit(f"split:{spec.key}")
 
@@ -446,7 +478,7 @@ def splits(state: State, monster: Monster, payload: float = 0.0) -> None:
 @trait("revives", "death", label="復活",
        note="會爬起來一次，要再打一次才真的死",
        params={"revive_hp": (0.6, "復活後剩幾成血"),
-               "revive_delay": (1.6, "倒下多久才爬起來")})
+               "revive_delay": (0.5, "倒下多久才爬起來")})
 def revives(state: State, monster: Monster, payload: float = 0.0) -> None:
     """Get back up once.
 

@@ -55,14 +55,30 @@ def clamp_colour(colour, alpha: float | None = None):
     return (r, g, b, max(0, min(255, int(alpha))))
 
 
-def walk_phase(x: float, y: float) -> float:
-    """Return the walk cycle's phase for a figure at this position.
+def walk_phase(ticks: int, speed: float, x: float, y: float) -> float:
+    """Return the walk cycle's phase for a figure moving at ``speed``.
 
-    Derived from position so it is automatically correct: something that moves
-    animates, something that stops freezes mid-step, and nothing has to remember
-    anything between frames.
+    **Driven by the clock, not by position.**  The previous version returned
+    ``(x + y) / STRIDE``, on the reasoning that a figure which moves animates
+    and a figure which stops freezes, with nothing to remember between frames.
+    The reasoning is wrong, and measurably so: every function of position has
+    level curves, and walking along one leaves the phase unchanged.  Here the
+    level curves were the up-right and down-left diagonals, so on two of the
+    eight directions the legs did not move **at all** — 0.0000 radians per
+    frame against 0.7894 going straight — and the figure slid across the ground.
+    The other two diagonals ran 41% fast.  No coefficient fixes that; the whole
+    approach cannot work.
+
+    Time has no null direction, so this is correct in all eight.  Scaling by
+    ``speed`` keeps what the old version got right: a monster wading through mud
+    takes slower steps, because its speed is what fell, not the clock.
+
+    Position survives only as a small phase *offset*, so a crowd does not march
+    in lockstep.  The coefficients are deliberately tiny — at walking pace they
+    add about 3% to the step rate, which is invisible, while still spreading a
+    full cycle across the width of the field.
     """
-    return (x + y) / STRIDE * math.tau
+    return (ticks * speed / 60.0) / STRIDE * math.tau + x * 0.0073 + y * 0.0041
 
 
 def shadow(surface: pygame.Surface, x: float, y: float, radius: float,

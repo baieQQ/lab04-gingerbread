@@ -24,6 +24,7 @@ from .constants import (ACTION_POINTS, CAMPAIGN_NIGHTS, DAY_SECONDS, FIXED_DT,
 from .contract import (ActionError, apply_action, is_terminal, new_game,
                        parse_action, run_script, snapshot, snapshot_brief)
 from .derive import Derived, derive, is_lit, light_level, lights_of
+from .score import Line, Report, grade_night
 from .director import director_for
 from .entities import (Boss, Drop, Effect, Light, Monster, Obstacle, Player,
                        Projectile, Warning)
@@ -42,6 +43,7 @@ __all__ = [
     "Obstacle", "Effect", "Light",
     # derived
     "derive", "Derived", "lights_of", "is_lit", "light_level",
+    "grade_night", "Report", "Line",
     "director_for",
     # constants worth re-exporting
     "WIDTH", "HEIGHT", "SISTER_X", "SISTER_Y", "FIXED_DT",
