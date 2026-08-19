@@ -215,6 +215,8 @@ class UI:
              width: int | None = None) -> pygame.Rect:
         """Draw one line.  ``pos`` is the anchor and is always vertically centred."""
         size = size or self.theme.body
+        if not s or not s.strip():
+            return pygame.Rect(pos, (0, self.book.line_height(size)))
         if width is not None:
             s = self.truncate(s, width, size)
         surf = self.book.render(s, size, colour or self.theme.fg)

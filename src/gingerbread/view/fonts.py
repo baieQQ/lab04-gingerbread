@@ -141,6 +141,9 @@ class FontBook:
         self._fonts = {name: load_font(max(8, int(round(size * scale))), root)
                        for name, size in self.SIZES.items()}
         self._cache: dict[tuple[str, str, RGB], pygame.Surface] = {}
+        #: Strings already reported as unrenderable, so one bad label logs once
+        #: instead of sixty times a second.
+        self._warned: set[str] = set()
 
     def font(self, size: str = "body") -> pygame.font.Font:
         """Return the raw pygame font for measurement or custom rendering."""
@@ -160,7 +163,20 @@ class FontBook:
             return hit
         if len(self._cache) >= self._CAP:
             self._cache.clear()
-        surface = self._fonts[size].render(text, True, colour)
+        try:
+            surface = self._fonts[size].render(text, True, colour)
+        except pygame.error as exc:
+            # **A label must never be able to close the game.**  SDL_ttf raises
+            # "Text has zero width" for a string it cannot lay out at all — a
+            # size it dislikes, a subset missing every glyph in the line — and
+            # an uncaught one takes the whole window down on a screen the
+            # developer does not own.  A missing caption is a blemish; a window
+            # that vanishes on the title screen is the end of the demo.
+            if text not in self._warned:
+                self._warned.add(text)
+                print(f"[gingerbread] 這行字畫不出來（{size}）：{text!r} — {exc}")
+            surface = pygame.Surface((1, self.line_height(size)),
+                                     pygame.SRCALPHA)
         self._cache[key] = surface
         return surface
 
