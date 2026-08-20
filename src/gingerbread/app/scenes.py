@@ -607,10 +607,43 @@ class MapScene(Scene):
         ui.text(str(number), pos, "small", ink, "center")
 
         boss = BOSSES.get(stage.boss) if stage and stage.boss else None
-        if boss is not None:
-            name = boss.name if (done or here) else "？？？"
-            ui.text(name, (pos[0], pos[1] + ui.s(26)), "tiny",
-                    P.BOSS if (done or here) else P.MUTED, "center")
+        if boss is None:
+            # Night one has no boss, so the node carries the two people the
+            # whole road is about instead.
+            self._pair(ui, pos)
+            return
+        self._portrait(ui, f"monster.{stage.boss}", pos, known=done or here)
+        name = boss.name if (done or here) else "？？？"
+        ui.text(name, (pos[0], pos[1] + ui.s(26)), "tiny",
+                P.BOSS if (done or here) else P.MUTED, "center")
+
+    #: How tall a boss stands over its node, in layout units.
+    FACE = 58
+
+    def _portrait(self, ui: UI, key: str, pos, *, known: bool) -> None:
+        """The boss itself, standing on its node.
+
+        Unreached nights get the same art filled black — a silhouette says
+        "something is waiting there" where ``？？？`` only says "we are not
+        telling you", and the shape is a promise the player can look forward
+        to keeping.
+        """
+        art = self.g.assets.fitted(key, ui.s(self.FACE))
+        if art is None:
+            return
+        if not known:
+            art = art.copy()
+            art.fill((58, 48, 74, 255), special_flags=pygame.BLEND_RGBA_MULT)
+        ui.surface.blit(art, art.get_rect(
+            midbottom=(pos[0], pos[1] - ui.s(12))))
+
+    def _pair(self, ui: UI, pos) -> None:
+        """Hansel and Gretel, at the village where the road starts."""
+        for key, dx, span in (("char.gretel", 16, 40), ("char.hansel", -14, 44)):
+            art = self.g.assets.fitted(key, ui.s(span))
+            if art is not None:
+                ui.surface.blit(art, art.get_rect(
+                    midbottom=(pos[0] + ui.s(dx), pos[1] - ui.s(10))))
 
     def _caption(self, ui: UI, night: int) -> None:
         """What tonight is, in the words the stage table already uses."""
@@ -855,7 +888,11 @@ class PlayScene(Scene):
                 if state.meta.night >= UPGRADES[k].unlock_night]
         ui.text(f"用糖霜強化漢賽爾　（{state.meta.sugar}）",
                 (ui.s(left), ui.s(160)), "small", P.SUGAR)
-        col = _col(ui, left, 178, width, 44 * len(rows), gap=6)
+        # Measured for the rows that actually exist.  At 42 + 6 the seventh
+        # row (生命) started at 466 and the skill-detail strip starts at 462:
+        # the last upgrade in the shop was drawn underneath a panel, so a
+        # player could see six of the seven things they were there to buy.
+        col = _col(ui, left, 172, width, 40 * len(rows), gap=4)
         for key in rows:
             spec = UPGRADES[key]
             level = state.meta.level(key)
@@ -868,7 +905,7 @@ class PlayScene(Scene):
             sub = ("已經到頂" if maxed else "她現在沒有傷口" if full
                    else f"{spec.description}　糖霜 {price}")
             can = not maxed and not full and state.meta.sugar >= price
-            if ui.button(f"buy:{key}", col.slot(ui.s(42)), label, sub,
+            if ui.button(f"buy:{key}", col.slot(ui.s(36)), label, sub,
                          enabled=can):
                 self.g.act(f"buy:{key}")
 
@@ -951,12 +988,12 @@ class PlayScene(Scene):
         else:
             missing = "、".join(f"{i + 1} 階" for i in empty)
             why = f"先選好 {missing} 技能（在右邊）"
-        if ui.button("night", ui.box(MID - 140, 566, 280, 48), "天黑",
+        if ui.button("night", ui.box(MID - 150, 540, 300, 50), "天黑",
                      why, enabled=ready):
             self.g.act("begin_night")
 
     #: Where the full text of the pointed-at skill is printed, and how wide.
-    DETAIL_Y = 470
+    DETAIL_Y = 462
     DETAIL_W = 780
 
     def _skill_detail(self, ui: UI, rows) -> None:
@@ -984,10 +1021,10 @@ class PlayScene(Scene):
                     break
 
         box = ui.box(MID - self.DETAIL_W // 2, self.DETAIL_Y,
-                     self.DETAIL_W, 58)
+                     self.DETAIL_W, 56)
         ui.panel(box, P.INK, P.LINE)
         if shown is None:
-            ui.text("把游標移到技能上，這裡會顯示完整說明",
+            ui.text("把滑鼠移到技能上，這裡會顯示完整說明",
                     (box.centerx, box.centery), "small", P.BONE_DIM, "center")
             return
 
@@ -1487,47 +1524,77 @@ class DawnScene(Scene):
         state = self.g.state
         ui.veil(238)
 
-        ui.text(f"撐過了第 {state.meta.night} 夜", (ui.s(MID), ui.s(124)),
+        ui.text(f"撐過了第 {state.meta.night} 夜", (ui.s(MID), ui.s(92)),
                 "big", P.BONE, "center")
         ui.text("天亮了，村民又變回和善的樣子。",
-                (ui.s(MID), ui.s(162)), "small", P.BONE_DIM, "center")
+                (ui.s(MID), ui.s(126)), "small", P.BONE_DIM, "center")
 
         report = m.grade_night(state)
+
+        # The two of them, either side of the score.  This screen is the only
+        # moment in the loop where the player is told they succeeded, and the
+        # thing they succeeded at is standing right there — a number alone
+        # grades a performance, the pair reminds them what it was for.
+        self._pair(ui, report)
 
         # The grade, and immediately underneath it the reason.  A letter on its
         # own teaches nothing; the player reads "C" and learns only that they
         # are being judged.  Naming the weakest line turns the same letter into
         # an instruction for tomorrow night.
-        badge = ui.box(MID - 46, 190, 92, 74)
+        badge = ui.box(MID - 48, 152, 96, 92)
         ui.panel(badge, P.PANEL, _GRADE_COLOUR.get(report.grade, P.BONE))
-        ui.text(report.grade, (badge.centerx, badge.top + ui.s(8)), "huge",
+        # Centred in the upper two thirds.  Anchored 8 px under the top edge it
+        # was *vertically centred there*, so half of a "huge" letter was drawn
+        # outside its own box.
+        ui.text(report.grade, (badge.centerx, badge.top + ui.s(34)), "huge",
                 _GRADE_COLOUR.get(report.grade, P.BONE), "center")
         ui.text(f"{report.points}/{report.out_of}",
-                (badge.centerx, badge.bottom - ui.s(20)), "small",
+                (badge.centerx, badge.bottom - ui.s(16)), "small",
                 P.MUTED, "center")
         if report.weakest is not None:
             ui.text(f"最弱的一環：{report.weakest.label}　{report.weakest.detail}",
-                    (ui.s(MID), ui.s(274)), "small", P.EMBER, "center")
+                    (ui.s(MID), ui.s(264)), "small", P.EMBER, "center")
 
-        y = 306
+        y = 296
         for line in report.lines:
-            ui.text(line.label, (ui.s(MID - 210), ui.s(y)), "small", P.BONE_DIM)
-            bar = ui.box(MID - 150, y + 4, 200, 10)
+            ui.text(line.label, (ui.s(MID - 214), ui.s(y)), "small", P.BONE_DIM)
+            bar = ui.box(MID - 152, y + 4, 196, 10)
             ui.bar(bar, line.fraction,
                    P.BLOOD if line.fraction < 0.4 else
                    (P.EMBER if line.fraction < 0.85 else P.GOOD))
             ui.text(f"{line.points}/{line.out_of}",
-                    (ui.s(MID + 66), ui.s(y)), "small", P.BONE)
-            ui.text(ui.truncate(line.detail, ui.s(190), "small"),
-                    (ui.s(MID + 110), ui.s(y)), "small", P.MUTED)
+                    (ui.s(MID + 60), ui.s(y)), "small", P.BONE)
+            ui.text(ui.truncate(line.detail, ui.s(206), "small"),
+                    (ui.s(MID + 108), ui.s(y)), "small", P.MUTED)
             y += 26
 
         ui.text(f"糖霜 {state.meta.sugar}　·　明天會再多一點技能點",
-                (ui.s(MID), ui.s(y + 18)), "body", P.SUGAR, "center")
+                (ui.s(MID), ui.s(y + 20)), "body", P.SUGAR, "center")
 
-        if ui.button("next", ui.box(MID - 120, 524, 240, 46), "進入下一個白天"):
+        if ui.button("next", ui.box(MID - 130, 528, 260, 48), "進入下一個白天"):
             self.g.act("next_night")
             app.pop()
+
+    def _pair(self, ui: UI, report) -> None:
+        """Hansel and Gretel flanking the grade.
+
+        Gretel's posture is the report card the player actually cares about, so
+        she is drawn dimmer the worse the night went — at a D she is barely
+        there, which says more than the letter does.
+        """
+        state = self.g.state
+        left = self.g.assets.fitted("char.hansel", ui.s(96))
+        share = report.points / max(1, report.out_of)
+        right = self.g.assets.fitted("char.gretel", ui.s(88))
+        for art, x in ((left, MID - 168), (right, MID + 168)):
+            if art is None:
+                continue
+            if art is right and share < 0.999:
+                art = art.copy()
+                k = int(150 + 105 * share)
+                art.fill((k, k, k, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            ui.surface.blit(art, art.get_rect(
+                midbottom=(ui.s(x), ui.s(248))))
 
 
 # ── endless offer ────────────────────────────────────────────────────
@@ -1576,8 +1643,12 @@ class ResultScene(Scene):
     HOLD = 0.45
     #: Seconds the frozen frame takes to fade away under the menu.
     FADE = 1.35
-    #: How much of the frame is still visible once the fade has finished.
-    RESIDUE = 26
+    #: How much of the final frame is still visible once the fade has finished.
+    #: High on purpose — the frame is the *background* of the menu, not a thing
+    #: being cleared away.  At 26 it faded to a black screen with a hint of
+    #: shape in it, which is the same "cut away from your own ending" the whole
+    #: scene exists to avoid, just slower.
+    RESIDUE = 132
 
     def __init__(self, app_state) -> None:
         self.g = app_state
@@ -1617,6 +1688,12 @@ class ResultScene(Scene):
         if k < 1.0:
             return                          # nothing to read, nothing to click
         won = state.phase is m.Phase.VICTORY
+
+        # A scrim only under the words.  White text on a still-visible forest
+        # is unreadable, and veiling the whole screen to fix that would throw
+        # away the frame we just spent two seconds keeping.
+        scrim = ui.box(MID - 250, 96, 500, 330)
+        ui.panel(scrim, P.with_alpha(P.INK[:3], 216), P.LINE)
 
         ui.text("第一個冬天過去了" if won else "葛蕾特不見了",
                 (ui.s(MID), ui.s(140)), "huge",

@@ -404,7 +404,14 @@ def _kill(state: State, target: Monster, *, by_lantern: bool) -> None:
     if state.combo >= C.COMBO_BONUS_AT:
         payout += 1
 
-    state.drops.append(Drop(x=target.x, y=target.y, value=payout))
+    # Once tonight's budget is spent the bodies stop being worth anything.
+    # Capped where the sugar is *created* rather than where it is picked up, so
+    # what the player sees on the ground is always what they can still earn —
+    # a crystal that pays nothing would read as a bug, not as a limit.
+    payout = min(payout, state.meta.sugar_left_tonight(state.meta.night))
+    if payout > 0:
+        state.meta.bank_night_sugar(state.meta.night, payout)
+        state.drops.append(Drop(x=target.x, y=target.y, value=payout))
     # Only ever rolled when he is actually hurt, so a full-health player never
     # walks past a heart they cannot use and never learns to ignore them.
     if state.player.hp < derive(state).max_hp \

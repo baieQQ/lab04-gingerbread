@@ -315,6 +315,12 @@ def spawn_burst(state: State, spec) -> None:
 def sugar_burst(state: State, spec) -> None:
     stream = state.streams.events
     for _ in range(int(spec.params.get("count", 8))):
+        # Through the night's budget like every other crystal.  This was the
+        # one sugar source that was not, which is why a measured perfect run
+        # came out eight over its cap on exactly the nights this event rolled.
+        if state.meta.sugar_left_tonight(state.meta.night) <= 0:
+            break
+        state.meta.bank_night_sugar(state.meta.night, 1)
         state.drops.append(Drop(x=stream.between(60.0, C.WIDTH - 60.0),
                                 y=stream.between(60.0, C.HEIGHT - 60.0),
                                 value=1))

@@ -85,6 +85,12 @@ class Meta:
     #: upgrade key -> how many times it has been bought.  See content/upgrades.
     upgrades: dict[str, int] = field(default_factory=dict)
 
+    #: Sugar already paid out by each night, indexed by night number.  A list
+    #: rather than a dict so the snapshot stays JSON-safe without key coercion.
+    #: See ``constants.NIGHT_SUGAR_BUDGET`` for why this is tracked at all.
+    night_sugar: list[int] = field(
+        default_factory=lambda: [0] * (C.CAMPAIGN_NIGHTS + 1))
+
     #: Skills learned, in learn order.  Once learned, always usable.
     skills: list[str] = field(default_factory=list)
     #: Unspent skill points.  One arrives each day.
@@ -117,6 +123,28 @@ class Meta:
     def level(self, key: str) -> int:
         """How many times ``key`` has been bought.  Absent means zero."""
         return self.upgrades.get(key, 0)
+
+    def sugar_left_tonight(self, night: int) -> int:
+        """How much more sugar this night may still drop.
+
+        Unlimited in endless, which has no nights to budget and whose whole
+        pressure curve assumes the player keeps being paid.
+        """
+        if self.mode is not Mode.CAMPAIGN:
+            return 10 ** 9
+        if not 0 <= night < len(C.NIGHT_SUGAR_BUDGET):
+            return 10 ** 9
+        while len(self.night_sugar) <= night:
+            self.night_sugar.append(0)
+        return max(0, C.NIGHT_SUGAR_BUDGET[night] - self.night_sugar[night])
+
+    def bank_night_sugar(self, night: int, amount: int) -> None:
+        """Record that ``night`` has now paid out ``amount`` more."""
+        if self.mode is not Mode.CAMPAIGN or amount <= 0:
+            return
+        while len(self.night_sugar) <= night:
+            self.night_sugar.append(0)
+        self.night_sugar[night] += amount
 
     @property
     def max_sister_hp(self) -> int:

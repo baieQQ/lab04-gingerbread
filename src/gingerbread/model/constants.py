@@ -218,6 +218,24 @@ UPGRADE_PRICE_STEP: Final = 2
 # ── seven-nights campaign ────────────────────────────────────────────
 CAMPAIGN_NIGHTS: Final = 7
 SPELL_UNLOCK_NIGHT: Final = 3
+
+#: The most sugar a given night will ever pay out, across every attempt at it.
+#:
+#: Measured, not guessed.  A perfect clear used to drop 30 / 76 / 99 / 95 /
+#: 146 / 121 / 185 — 752 over the campaign against 228 to buy literally
+#: everything in the shop, so a competent player had the whole upgrade tree by
+#: night four and the last three nights had no economy at all.
+#:
+#: The leak was worse than that: a lost night is retried with the sugar from
+#: the failed attempt still in the bank, so the reliable way to get rich was to
+#: play badly on purpose.  Budgeting *per night* rather than per attempt closes
+#: that — night five is worth a hundred sugar whether you clear it first time
+#: or fifth — and it is the only version of this rule that a player who fails a
+#: lot is not punished by.
+#:
+#: Totals 594 against 584 to max the tree, so a perfect run that never buys a
+#: bandage finishes the seventh night having just barely bought everything.
+NIGHT_SUGAR_BUDGET: Final = (0, 30, 58, 74, 86, 100, 114, 132)
 FIRST_BOSS_NIGHT: Final = 2        # night 1 is the tutorial
 
 # ── endless mode ─────────────────────────────────────────────────────

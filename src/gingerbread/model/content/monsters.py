@@ -37,7 +37,7 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
 
     "brute": MonsterSpec(
         key="brute", name="壯漢",
-        hp=4, speed=29.0, radius=15.0, sugar=2,
+        hp=5, speed=29.0, radius=15.0, sugar=2,
         knockable=False,
         colour=(142, 42, 70), silhouette="brute",
         step_hz=110.0),
@@ -54,7 +54,7 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         # Half the speed of the others.  It has to be got behind, and a monster
         # that has to be walked around cannot also be one that outruns you —
         # the manoeuvre and the chase were competing for the same seconds.
-        hp=3, speed=16.0, radius=11.0, sugar=2,
+        hp=4, speed=16.0, radius=11.0, sugar=2,
         # Cannot be knocked back, and that is forced by its own rule: it must be
         # struck from behind, which means the player stands on the far side from
         # Gretel, which means any knockback drives it *into* her.  Hitting it
@@ -114,7 +114,7 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
     # ── 6｜復活怪 ───────────────────────────────────────────────────
     "riser": MonsterSpec(
         key="riser", name="復活怪",
-        hp=3, speed=31.0, radius=11.0, sugar=3,
+        hp=4, speed=31.0, radius=11.0, sugar=3,
         traits=("revives",),
         params={"revive_hp": 0.6, "revive_delay": 1.6},
         colour=(108, 74, 118), silhouette="villager",
@@ -137,7 +137,7 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
     # ── 8｜盔甲怪 ───────────────────────────────────────────────────
     "armoured": MonsterSpec(
         key="armoured", name="盔甲怪",
-        hp=3, speed=25.0, radius=14.0, sugar=3,
+        hp=4, speed=25.0, radius=14.0, sugar=3,
         knockable=False,
         traits=("armoured",),
         params={"armour": 3},
