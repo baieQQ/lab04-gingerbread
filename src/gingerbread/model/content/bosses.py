@@ -61,20 +61,20 @@ BOSSES: Final[dict[str, BossSpec]] = {
         key="shade_archer", name="褪影射手", title="第三夜",
         hp=52, speed=36.0, radius=25.0, sugar=20,
         weakness="light",
-        traits=("fades",),
-        params={"fade": 0.8},
+        traits=("fades", "blinks"),
+        params={"fade": 0.8, "blink_every": 2.2, "blink_ring": 250.0},
         colour=(92, 96, 122),
         phases=(
             BossPhase(until_hp=0.5, behaviour="standoff",
                       params={"standoff": 280.0, "windup": 1.5,
                               "reload": 2.0, "shot_speed": 260.0},
                       summons=(("archer", 7.0),),
-                      announce="箭從看不見的地方射來。照亮它。"),
+                      announce="打中它，它就閃走了。除非整片場地是亮的。"),
             BossPhase(until_hp=0.0, behaviour="standoff",
                       params={"standoff": 180.0, "windup": 1.2,
                               "reload": 1.4, "shot_speed": 300.0},
                       summons=(("archer", 4.0), ("faint", 6.0)),
-                      announce="它不再躲了。"),
+                      announce="它閃得更勤了。點亮全場，把它釘住。"),
         )),
 
     # 第四夜 — 教「風可以撥開視野」
@@ -152,20 +152,38 @@ BOSSES: Final[dict[str, BossSpec]] = {
         key="witch", name="糖果屋女巫", title="第七夜",
         hp=92, speed=31.0, radius=28.0, sugar=32,
         weakness=None,                       # 綜合：沒有單一解答
-        traits=("fades", "mud_trail"),
-        params={"fade": 0.7, "mud_every": 0.6, "mud_radius": 30.0,
-                "mud_slow": 0.7, "mud_life": 5.0},
+        # Everything the six nights taught, worn at once.  She is not given
+        # ``needs_soak``: her weakness is None, so nothing could ever open the
+        # gate and she would simply be invincible — the one shape a final boss
+        # must never take.
+        traits=("fades", "blinks", "buds", "hurls_fire",
+                "calls_meteors", "shrouds"),
+        # Every interval is longer than the boss it was borrowed from.  Five
+        # mechanics at their own tempos is not five times as interesting, it is
+        # noise — she should feel like she is choosing, not like the field is
+        # malfunctioning.
+        params={"fade": 0.7,
+                "blink_every": 3.4, "blink_ring": 230.0,
+                "bud_into": "child", "bud_every": 3.2,
+                "bud_cap": 6, "bud_delay": 0.35,
+                "fire_every": 4.4, "fire_speed": 145.0,
+                "fire_life": 4.0, "fire_spread": 0.4,
+                "meteor_every": 9.0, "meteor_min": 1, "meteor_max": 3,
+                "meteor_fall": 1.3, "meteor_radius": 42.0,
+                "meteor_spread": 56.0, "meteor_damage": 3,
+                "shroud_every": 22.0, "shroud_hold": 9.0,
+                "shroud_fog": 0.2, "shroud_cut": 3.0},
         entrance=28.0,
         colour=(150, 62, 120),
         phases=(
             BossPhase(until_hp=0.7, behaviour="flank",
                       params={"orbit": 230.0, "patience": 99.0},
-                      summons=(("villager", 4.0),), fog=0.8,
+                      summons=(("villager", 4.0),),
                       announce="每一張熟悉的臉，都開始扭曲。"),
             BossPhase(until_hp=0.35, behaviour="standoff",
                       params={"standoff": 210.0, "windup": 1.6, "reload": 1.8},
-                      summons=(("faint", 5.0), ("bomber", 6.0)), fog=0.6,
-                      announce="分身、隱形、噴火、隕石——全部一起來。"),
+                      summons=(("faint", 5.0), ("bomber", 6.0)),
+                      announce="分身、隱形、噴火、隕石——她把七夜全用上了。"),
             BossPhase(until_hp=0.0, behaviour="charge",
                       summons=(("brute", 4.0), ("armoured", 6.0)),
                       announce="只要妹妹還在身後，他就絕不後退。"),

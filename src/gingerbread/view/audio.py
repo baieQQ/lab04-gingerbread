@@ -59,6 +59,8 @@ EVENT_SOUNDS: Final[dict[str, str]] = {
     "fog_in": "fog_in",
     "fog_clear": "fog_clear",
     "fog_cut": "interrupt",
+    "blink:": "blink",
+    "pinned": "pinned",
     "meteor_call:": "meteor_call",
     "meteor_hit": "meteor_hit",
     "revive": "revive",

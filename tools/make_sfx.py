@@ -86,6 +86,9 @@ RECIPES = {
     "fog_clear":  (0.70, [("sine", 220, 620, 0.34, rise),
                           ("noise", 700, 1800, 0.20, rise)]),
     "meteor_call":(0.60, [("sine", 180, 520, 0.36, rise)]),
+    "blink":      (0.26, [("sine", 900, 240, 0.34, hit),
+                          ("noise", 2200, 500, 0.22, hit)]),
+    "pinned":     (0.30, [("sine", 300, 880, 0.34, rise)]),
     "meteor_hit": (0.60, [("sine", 130, 40, 0.95, hit),
                           ("noise", 1900, 300, 0.55, hit)]),
     # A stand-in for a real recorded cry.  Eighty lines of arithmetic cannot

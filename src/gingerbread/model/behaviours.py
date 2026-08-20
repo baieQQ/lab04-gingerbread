@@ -609,6 +609,56 @@ def calls_meteors(state: State, monster: Monster, payload: float = 0.0) -> None:
 
 
 # ── traits: hurt ─────────────────────────────────────────────────────
+@trait("blinks", "hurt", label="換位",
+       note="被打中就閃到別的地方；但只要全場是亮的，它就釘在原地跑不掉",
+       params={"blink_every": (2.2, "最快隔多久才能再閃一次"),
+               "blink_ring": (250.0, "閃到離葛蕾特多遠的地方")})
+def blinks(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Vanish and reappear elsewhere when hit — unless the field is lit.
+
+    The shade archer's problem was that it was an archer.  It stood off, wound
+    up and shot, exactly like the ordinary archers it summons, and being
+    invisible on top of that changed how hard it was to find without changing
+    anything about what to *do* once found.  A boss should ask a different
+    question from its own minions.
+
+    So it does not stand and trade: land a hit and it is gone, and the fight
+    becomes a hunt across a dark field that resets every time it goes well.
+
+    The counter is written into the same sentence.  While 聖光 or 聖癒 has the
+    whole field lit, it cannot blink at all — so the answer to the third night's
+    boss is the element the third night is about, and a player who brings light
+    gets to fight it instead of chasing it.
+    """
+    if state.reveal_ticks > 0:
+        state.effects.append(Effect("pinned", monster.x, monster.y, 0.35, 0.35))
+        state.emit("pinned")
+        return
+
+    spec = _spec(monster)
+    since = monster.memory.get("blink", 99.0)
+    if since < param(spec, "blinks", "blink_every"):
+        return
+    monster.memory["blink"] = 0.0
+
+    state.effects.append(Effect("blink_out", monster.x, monster.y, 0.4, 0.4, 40))
+    ring = param(spec, "blinks", "blink_ring")
+    angle = state.streams.boss.between(0.0, math.tau)
+    reach = state.streams.boss.between(ring * 0.75, ring * 1.15)
+    monster.x = g.clamp(C.SISTER_X + math.cos(angle) * reach, 20, C.WIDTH - 20)
+    monster.y = g.clamp(C.SISTER_Y + math.sin(angle) * reach, 20, C.HEIGHT - 20)
+    monster.charge = 0.0                 # whatever it was aiming is spoiled too
+    state.effects.append(Effect("blink_in", monster.x, monster.y, 0.4, 0.4, 40))
+    state.emit(f"blink:{spec.key}")
+
+
+@trait("blinks", "tick", label="換位",
+       note="被打中就閃到別的地方；但只要全場是亮的，它就釘在原地跑不掉")
+def blinks_tick(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Advance the blink cooldown; see ``blinks``."""
+    monster.memory["blink"] = monster.memory.get("blink", 99.0) + C.FIXED_DT
+
+
 @trait("frenzy", "hurt", label="狂化", note="受傷之後變快",
        params={"frenzy_factor": (1.35, "速度倍率")})
 def frenzy(state: State, monster: Monster, payload: float = 0.0) -> None:
