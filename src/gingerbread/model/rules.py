@@ -335,6 +335,22 @@ def damage_target(state: State, target: Monster, amount: int, *,
             state.emit(f"reflected:{target.spec}")
             return
 
+    # ── the hob: red hot, and nothing lands until it is put out ──────
+    #
+    # An ordinary weakness is an *incentive* — matching it hits harder.  This
+    # one is a *gate*: the fight does not begin until the player brings water.
+    # Written as a trait rather than as a rule about the ash hob so the witch
+    # can wear the same armour in her fire phase without a second code path.
+    #
+    # The gate opens on ``exposed``, which is exactly what a matching-element
+    # skill already sets — so 水牢 and 怒潮 unlock it and nothing else does,
+    # without either spell needing to know this boss exists.
+    if "needs_soak" in traits and target.memory.get("exposed", 0.0) <= 0:
+        target.hit_flash = 0.10
+        state.effects.append(Effect("clang", target.x, target.y, 0.3, 0.3))
+        state.emit(f"armour:{target.spec}")
+        return
+
     # ── weakness, and the window a matching skill opens ──────────────
     amount = int(round(amount * element_multiplier(
         element, getattr(spec, "weakness", None))))
@@ -636,7 +652,13 @@ def _advance_bosses(state: State, dt: float) -> None:
         if boss.memory.get("exposed", 0.0) > 0:
             boss.memory["exposed"] -= dt
         fire_traits("tick", getattr(spec, "traits", ()), state, boss)
-        if boss.knockback > 0:
+        if boss.memory.get("planted", 0.0) > 0:
+            # Rooted while it channels something.  Set by the ``shrouds`` trait
+            # and nothing else; the phase's behaviour is simply not run, rather
+            # than the boss being stunned — a stun would skip the trait tick
+            # above and the boss would stay planted forever.
+            pass
+        elif boss.knockback > 0:
             _apply_knockback(state, boss, dt)
         else:
             run_behaviour(phase.behaviour, state, boss, dt)
@@ -709,6 +731,35 @@ def spawn_boss(state: State, key: str) -> None:
 
 
 # ── projectiles, effects, pickups ────────────────────────────────────
+def _bounce(shot: Projectile) -> bool:
+    """Reflect a bouncing shot off the four walls.  False if it is elsewhere.
+
+    Only the walls, and only for the kinds that ask for it.  A fireball that
+    stops at the edge of the map is a fireball the player walks around; one
+    that comes back is a thing they have to keep track of, which is the whole
+    reason the hob throws them.
+    """
+    hit = False
+    if shot.x < shot.radius:
+        shot.x, shot.vx, hit = shot.radius, abs(shot.vx), True
+    elif shot.x > C.WIDTH - shot.radius:
+        shot.x, shot.vx, hit = C.WIDTH - shot.radius, -abs(shot.vx), True
+    if shot.y < shot.radius:
+        shot.y, shot.vy, hit = shot.radius, abs(shot.vy), True
+    elif shot.y > C.HEIGHT - shot.radius:
+        shot.y, shot.vy, hit = C.HEIGHT - shot.radius, -abs(shot.vy), True
+    return hit
+
+
+def _burn_out(state: State, shot: Projectile) -> None:
+    """Leave a patch of fire where a fireball finished."""
+    state.puddles.append(Puddle(
+        x=shot.x, y=shot.y, radius=30.0, kind="fire",
+        slow=1.0, burn=1.0, life=2.6))
+    state.effects.append(Effect("blaze", shot.x, shot.y, 0.4, 0.4, 30))
+    state.emit("blaze")
+
+
 def _advance_projectiles(state: State, dt: float) -> None:
     alive: list[Projectile] = []
     for shot in state.projectiles:
@@ -716,15 +767,30 @@ def _advance_projectiles(state: State, dt: float) -> None:
         shot.x += shot.vx * dt
         shot.y += shot.vy * dt
 
-        if shot.life <= 0 or not (0 <= shot.x <= C.WIDTH and 0 <= shot.y <= C.HEIGHT):
+        bouncy = shot.kind in C.BOUNCING_SHOTS
+        if bouncy and shot.life > 0:
+            if _bounce(shot):
+                state.emit("bounce")
+
+        if shot.life <= 0:
+            if bouncy:
+                _burn_out(state, shot)
+            continue
+        if not (0 <= shot.x <= C.WIDTH and 0 <= shot.y <= C.HEIGHT):
             continue
         if g.blocked_by(state.obstacles, shot.x, shot.y, shot.radius):
             state.effects.append(Effect("spark", shot.x, shot.y, 0.2, 0.2))
+            if bouncy:
+                _burn_out(state, shot)
             continue
 
         if not shot.friendly:
-            if g.circles_touch(shot.x, shot.y, shot.radius,
-                               C.SISTER_X, C.SISTER_Y, C.SISTER_REACH * 0.7):
+            # The hob's fire is aimed at Hansel and only Hansel.  A boss whose
+            # attack also chews through Gretel would be won by standing far away
+            # from her, which is the opposite of what this game asks for.
+            if shot.kind not in C.SPARES_SISTER and g.circles_touch(
+                    shot.x, shot.y, shot.radius,
+                    C.SISTER_X, C.SISTER_Y, C.SISTER_REACH * 0.7):
                 if not state.meta.godmode:
                     state.meta.sister_hp = max(
                         0, state.meta.sister_hp - shot.damage)
@@ -735,6 +801,8 @@ def _advance_projectiles(state: State, dt: float) -> None:
             if g.circles_touch(shot.x, shot.y, shot.radius,
                                state.player.x, state.player.y, C.PLAYER_RADIUS):
                 hurt_player(state, shot.damage)
+                if shot.kind in C.BOUNCING_SHOTS:
+                    _burn_out(state, shot)
                 continue
 
         alive.append(shot)
@@ -767,6 +835,9 @@ def _advance_hazards(state: State, dt: float) -> None:
     for hazard in state.hazards:
         hazard.life -= dt
         if hazard.life <= 0:
+            if hazard.kind == "meteor":
+                _meteor_lands(state, hazard)
+                continue
             # The water cage does not simply expire — it is a five-second
             # sentence, and this is the sentence being carried out.
             if hazard.kind == "cage":
@@ -780,6 +851,10 @@ def _advance_hazards(state: State, dt: float) -> None:
                                             0.5, 0.5, hazard.radius))
                 state.feedback.bump(shake=12.0, freeze=0.06)
                 state.emit("cage_burst")
+            continue
+
+        if hazard.kind == "meteor":
+            alive.append(hazard)        # a telegraph, not a thing that catches
             continue
 
         hazard.x += hazard.vx * dt
@@ -828,16 +903,77 @@ def _advance_hazards(state: State, dt: float) -> None:
     state.hazards = alive
 
 
+def _meteor_lands(state: State, hazard: Hazard) -> None:
+    """Resolve one meteor: it hits whatever is standing where it was aimed.
+
+    Whatever, deliberately — including the sorcerer who called it.  The whole
+    fight is built on that: the moon-mage always drops them exactly where
+    Hansel is standing, never where he is going, so stepping out of the circle
+    at the last moment is not merely a dodge, it is an attack.  A boss whose
+    own shot could not hurt it would make 疾風 a way to survive the fight
+    rather than a way to win it.
+
+    Gretel is untouched — ``SPARES_SISTER`` — for the same reason the hob's
+    fire spares her: a boss that damaged her from range would be answered by
+    standing as far from her as possible.
+    """
+    blast = hazard.radius
+    state.effects.append(Effect("meteor_hit", hazard.x, hazard.y, 0.5, 0.5,
+                                int(blast)))
+    state.feedback.bump(shake=13.0, freeze=0.05)
+    state.emit("meteor_hit")
+
+    for target in list(state.monsters) + list(state.bosses):
+        if g.distance(target.x, target.y, hazard.x, hazard.y) > blast:
+            continue
+        _push(target, hazard.x, hazard.y, 90.0)
+        damage_target(state, target, int(hazard.strength) or 3,
+                      element="fire", from_x=hazard.x, from_y=hazard.y)
+
+    if g.distance(state.player.x, state.player.y, hazard.x, hazard.y) <= blast:
+        hurt_player(state, 1)
+
+    # Two to three seconds of burning ground, which is what turns a dodged
+    # meteor into a piece of terrain the player still has to work around — and
+    # what gives 水牢 and 怒潮 something to do on a night whose boss is not
+    # otherwise a water puzzle.
+    state.puddles.append(Puddle(
+        x=hazard.x, y=hazard.y, radius=blast * 0.95, kind="fire",
+        slow=1.0, burn=1.0, life=2.6))
+
+
 def _advance_puddles(state: State, dt: float) -> None:
-    """Age the ground.  Anything with a finite life eventually dries out."""
+    """Age the ground, and let whatever is burning on it do its work.
+
+    ``Puddle.burn`` was declared from the start and never read by anything: a
+    patch of fire slowed nobody, hurt nobody, and existed only as an orange
+    circle. Both the hob's fireballs and the moon-mage's craters are built on
+    it, so it has to mean something before either fight can.
+    """
     alive: list[Puddle] = []
+    burning = False
+    p = state.player
     for pool in state.puddles:
         if pool.life > 0:
             pool.life -= dt
             if pool.life <= 0:
                 continue
         alive.append(pool)
+        if pool.burn > 0 and g.distance(p.x, p.y, pool.x, pool.y) <= pool.radius:
+            burning = True
     state.puddles = alive
+
+    # One tick of damage per interval no matter how many patches overlap.  A
+    # crater field of five meteors would otherwise take five half-hearts in the
+    # same frame, and dying to arithmetic is not the same as dying to a boss.
+    if not burning:
+        p.burn_tick = 0.0
+        return
+    p.burn_tick += dt
+    if p.burn_tick >= C.BURN_INTERVAL:
+        p.burn_tick = 0.0
+        state.effects.append(Effect("blaze", p.x, p.y, 0.25, 0.25, 18))
+        hurt_player(state, 1)
 
 
 def _advance_effects(state: State, dt: float) -> None:

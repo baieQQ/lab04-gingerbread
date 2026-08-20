@@ -85,6 +85,9 @@ class Player:
 
     #: Seconds the guard has been held.  Kept as a duration rather than a flag
     #: only so the renderer can fade the shield in instead of popping it.
+    #: Seconds accumulated while standing in fire, so a burn lands on a
+    #: cadence rather than every single frame.
+    burn_tick: float = 0.0
     guard: float = 0.0
 
     #: The skill being held down, and for how long.  Charging lives on the

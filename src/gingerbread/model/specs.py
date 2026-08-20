@@ -150,6 +150,10 @@ class BossSpec:
     silhouette: str = "brute"
     sprite: str | None = None
 
+    def param(self, name: str, default: float = 0.0) -> float:
+        """Same accessor a monster row has, so shared traits can read either."""
+        return float(self.params.get(name, default))
+
 
 @dataclass(frozen=True, slots=True)
 class UpgradeSpec:

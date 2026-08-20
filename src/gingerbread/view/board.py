@@ -402,8 +402,36 @@ class Board:
             pygame.draw.circle(self.surface, P.BOSS,
                                (int(boss.x), int(boss.y)),
                                int(spec.radius + 10), 2)
+            self._seal(boss, spec, ticks)
             self._hp_pip(boss.x, boss.y, spec.radius,
                          boss.hp / max(1, boss.max_hp), width=72)
+
+    def _seal(self, boss, spec, ticks: int) -> None:
+        """Show whether a gated boss can currently be hurt.
+
+        The ash hob takes nothing at all until water has been thrown on it.
+        That is a fine rule and an unplayable one if the only way to learn it is
+        to swing eight times and watch the health bar not move — so the state
+        has to be on the boss, not in the manual: a shivering ring of embers
+        while it is sealed, and a clean blue ring for the three seconds it is
+        open.
+        """
+        if "needs_soak" not in getattr(spec, "traits", ()):
+            return
+        pos = (int(boss.x), int(boss.y))
+        if boss.memory.get("exposed", 0.0) > 0:
+            pygame.draw.circle(self.surface, (150, 205, 255), pos,
+                               int(spec.radius + 15), 3)
+            return
+        # Sealed: a ragged, flickering shell that reads as "not now".
+        for i in range(8):
+            a = ticks / 9.0 + i * math.tau / 8
+            wob = 1.0 + math.sin(ticks / 4.0 + i) * 0.10
+            r = (spec.radius + 14) * wob
+            pygame.draw.circle(
+                self.surface, P.EMBER,
+                (int(boss.x + math.cos(a) * r), int(boss.y + math.sin(a) * r)),
+                2)
 
     def _hp_pip(self, x: float, y: float, radius: float, fraction: float,
                 width: int | None = None) -> None:
@@ -468,6 +496,33 @@ class Board:
                     (int(pool.x), int(pool.y)), max(2, int(radius * 0.45)))
         self.surface.blit(self._fx, (0, 0))
 
+    def _meteor(self, hazard, pos, radius: int, ticks: int) -> None:
+        """The circle a rock is about to land in, and the rock coming down.
+
+        Everything here is read off ``hazard.life``, which is the same number
+        the rules use to decide when it lands — so the ring can never close
+        early or late.  A telegraph the player cannot trust is worse than none:
+        they stop reading it and start guessing.
+        """
+        # Ground ring, filling in as the moment approaches.
+        share = max(0.0, min(1.0, 1.0 - hazard.life / 1.15))
+        self._fx.fill((0, 0, 0, 0))
+        pygame.draw.circle(self._fx, _clamp_colour(P.ARCANE_BRIGHT, 55),
+                           pos, radius)
+        pygame.draw.circle(self._fx, _clamp_colour(P.ARCANE_BRIGHT, 210),
+                           pos, radius, 2)
+        inner = max(2, int(radius * share))
+        pygame.draw.circle(self._fx, _clamp_colour(P.EMBER, 120), pos, inner)
+        self.surface.blit(self._fx, (0, 0))
+
+        # The rock itself, falling from off the top of the screen into the
+        # centre of the ring.  Without it the ring is a mystery rather than a
+        # warning — the player has to be able to see the cause coming.
+        drop = pos[1] - int((1.0 - share) * 260)
+        size = max(3, int(6 + 7 * share))
+        pygame.draw.circle(self.surface, P.EMBER_CORE, (pos[0], drop), size + 2)
+        pygame.draw.circle(self.surface, (240, 226, 255), (pos[0], drop), size)
+
     def _draw_hazards(self, state: State, ticks: int) -> None:
         """The twister and the water trap.
 
@@ -477,6 +532,9 @@ class Board:
         for hazard in state.hazards:
             pos = (int(hazard.x), int(hazard.y))
             radius = int(hazard.radius)
+            if hazard.kind == "meteor":
+                self._meteor(hazard, pos, radius, ticks)
+                continue
             if hazard.kind == "twister":
                 # A stack of offset ellipses, each turning faster than the one
                 # below it: the shear is what reads as a funnel rather than as
@@ -582,6 +640,16 @@ class Board:
                 pygame.draw.line(self._fx, _clamp_colour(P.EMBER, 170), back, pos,
                                  max(1, 3))
                 self.surface.blit(self._fx, (0, 0))
+            if shot.kind == "fireball":
+                # A lump of flame with a shimmering corona, so it is never
+                # mistaken for the archer's arrow — they are answered
+                # differently and must not look alike.
+                flare = 0.5 + math.sin(shot.life * 11.0) * 0.5
+                pygame.draw.circle(self.surface, P.EMBER_CORE, pos,
+                                   int(shot.radius + 3 + flare * 2))
+                pygame.draw.circle(self.surface, (255, 226, 150), pos,
+                                   max(2, int(shot.radius - 1)))
+                continue
             pygame.draw.circle(self.surface, F.OUTLINE, pos,
                                int(shot.radius) + 2)
             pygame.draw.circle(self.surface, P.EMBER_CORE, pos, int(shot.radius))

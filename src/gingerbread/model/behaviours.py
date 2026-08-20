@@ -23,16 +23,28 @@ import math
 
 from . import constants as C
 from . import geometry as g
+from .content.bosses import BOSSES
 from .content.monsters import MONSTERS
 from .derive import derive, is_lit
-from .entities import Drop, Effect, Monster, Obstacle, Projectile, Puddle
+from .entities import (Drop, Effect, Hazard, Monster, Obstacle, Projectile,
+                       Puddle)
 from .registry import behaviour, param, trait
 from .state import State
 
 
 def _spec(monster: Monster):
-    """Return the spec row for a monster, falling back to the plain villager."""
-    return MONSTERS.get(monster.spec) or MONSTERS["villager"]
+    """Return the spec row behind an entity — monster **or** boss.
+
+    Bosses were missing from this lookup, so every boss fell through to the
+    villager row and read *its* numbers.  The traits still ran; they simply ran
+    on the wrong data.  The candy slime is the clearest casualty: its syrup was
+    tuned wide, slow and long-lasting in ``content/bosses.py`` and it laid
+    villager-default puddles instead — small, weak, and dry in six seconds.
+    The trait looked broken, and the boss looked like it had no mechanic.
+    """
+    return (MONSTERS.get(monster.spec)
+            or BOSSES.get(monster.spec)
+            or MONSTERS["villager"])
 
 
 def _aim_around(state: State, mx: float, my: float, tx: float, ty: float,
@@ -437,6 +449,165 @@ def mud_trail(state: State, monster: Monster, payload: float = 0.0) -> None:
         life=param(spec, "mud_trail", "mud_life")))
 
 
+@trait("hurls_fire", "tick", label="吐火球",
+       note="定時朝漢賽爾丟一顆會彈牆的火球；火球不傷葛蕾特，落地留下一片火",
+       params={"fire_every": (2.4, "多久丟一顆"),
+               "fire_speed": (150.0, "火球飛多快"),
+               "fire_life": (5.0, "彈幾秒才熄"),
+               "fire_spread": (0.35, "瞄不準的角度")})
+def hurls_fire(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Lob a bouncing fireball at Hansel.
+
+    Aimed at where he *is*, not where he will be, and deliberately a little
+    off — a shot that cannot miss is a tax, and one that ricochets around the
+    room for five seconds afterwards is a hazard the player has to keep half an
+    eye on while doing everything else.  That second half is the point: the hob
+    is not trying to kill Hansel with any one throw, it is trying to make the
+    floor smaller.
+    """
+    spec = _spec(monster)
+    every = param(spec, "hurls_fire", "fire_every")
+    monster.memory["fire"] = monster.memory.get("fire", 0.0) + C.FIXED_DT
+    if monster.memory["fire"] < every:
+        return
+    monster.memory["fire"] = 0.0
+
+    p = state.player
+    dx, dy = g.normalise(p.x - monster.x, p.y - monster.y)
+    if dx == 0.0 and dy == 0.0:
+        dx, dy = 1.0, 0.0
+    spread = param(spec, "hurls_fire", "fire_spread")
+    angle = math.atan2(dy, dx) + state.rng.between(-spread, spread)
+    speed = param(spec, "hurls_fire", "fire_speed")
+    state.projectiles.append(Projectile(
+        x=monster.x, y=monster.y,
+        vx=math.cos(angle) * speed, vy=math.sin(angle) * speed,
+        radius=7.0, damage=1,
+        life=param(spec, "hurls_fire", "fire_life"),
+        kind="fireball"))
+    state.effects.append(Effect("blaze", monster.x, monster.y, 0.3, 0.3, 20))
+    state.emit(f"fireball:{spec.key}")
+
+
+@trait("shrouds", "tick", label="放霧",
+       note="定時停在原地放霧，全場幾乎全黑；跑過去打它，三秒後霧就散了",
+       params={"shroud_every": (13.0, "多久放一次"),
+               "shroud_hold": (11.0, "沒人打它的話撐多久"),
+               "shroud_fog": (0.16, "放霧時光照剩幾成"),
+               "shroud_cut": (3.0, "被打之後幾秒散掉")})
+def shrouds(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Plant, and pull the dark in until somebody comes and stops it.
+
+    The reaper's old fog was a phase-wide multiplier that simply *was*, for the
+    whole fight, with nothing the player could do about it but squint.  A
+    condition with no answer is not difficulty, it is weather.
+
+    Now it is an act: the reaper stops, the field goes almost black, and the
+    only thing still lit is the reaper itself — so the fog is also the arrow
+    pointing at its own off-switch.  Hitting it does not clear the fog at once;
+    it starts a three-second collapse, which is long enough that the player has
+    to decide whether to run back to Gretel or stay and press the advantage.
+    """
+    spec = _spec(monster)
+    mem = monster.memory
+    held = mem.get("planted", 0.0)
+
+    if held > 0:
+        mem["planted"] = held - C.FIXED_DT
+        state.fog_scale = min(state.fog_scale,
+                              param(spec, "shrouds", "shroud_fog"))
+        if mem["planted"] <= 0:
+            mem["planted"] = 0.0
+            mem["shroud"] = 0.0
+            state.effects.append(Effect("clear", monster.x, monster.y,
+                                        0.6, 0.6, 200))
+            state.emit("fog_clear")
+        return
+
+    mem["shroud"] = mem.get("shroud", 0.0) + C.FIXED_DT
+    if mem["shroud"] < param(spec, "shrouds", "shroud_every"):
+        return
+    mem["shroud"] = 0.0
+    mem["planted"] = param(spec, "shrouds", "shroud_hold")
+    state.effects.append(Effect("shroud", monster.x, monster.y, 0.9, 0.9, 320))
+    state.feedback.bump(shake=4.0)
+    state.emit("fog_in")
+
+
+@trait("shrouds", "hurt", label="放霧",
+       note="定時停在原地放霧，全場幾乎全黑；跑過去打它，三秒後霧就散了")
+def shrouds_hurt(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Landing a hit on the planted reaper starts the fog collapsing."""
+    mem = monster.memory
+    held = mem.get("planted", 0.0)
+    cut = param(_spec(monster), "shrouds", "shroud_cut")
+    if held > cut:
+        mem["planted"] = cut
+        state.effects.append(Effect("clear", monster.x, monster.y, 0.5, 0.5, 120))
+        state.emit("fog_cut")
+
+
+@trait("calls_meteors", "tick", label="召隕石",
+       note="一次落下一到五顆隕石，永遠砸在你當下站的位置；"
+            "閃開就會砸到它自己，落點會燒起來，用水澆得掉",
+       params={"meteor_every": (5.5, "多久召一次"),
+               "meteor_min": (1.0, "最少幾顆"),
+               "meteor_max": (5.0, "最多幾顆"),
+               "meteor_fall": (1.15, "從畫圈到砸下來幾秒"),
+               "meteor_radius": (44.0, "爆炸範圍"),
+               "meteor_spread": (52.0, "多顆時彼此散開多遠"),
+               "meteor_damage": (3.0, "砸到怪扣多少")})
+def calls_meteors(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Drop rocks on wherever Hansel is standing right now.
+
+    "Right now" is the entire fight.  The sorcerer never leads its target, and
+    the phase line says so out loud — so the correct play is to stand still,
+    let it commit, and then be somewhere else when the rock arrives.  Its own
+    body is a legal target, which is what makes walking it into its own barrage
+    a real win condition rather than a joke.
+
+    Volleys of one to five, drawn per cast, because a fixed count becomes a
+    rhythm the player stops reading after the second one.
+    """
+    spec = _spec(monster)
+    mem = monster.memory
+    mem["meteor"] = mem.get("meteor", 0.0) + C.FIXED_DT
+    if mem["meteor"] < param(spec, "calls_meteors", "meteor_every"):
+        return
+    mem["meteor"] = 0.0
+
+    low = int(param(spec, "calls_meteors", "meteor_min"))
+    high = int(param(spec, "calls_meteors", "meteor_max"))
+    count = low + state.streams.boss.below(max(1, high - low + 1))
+    fall = param(spec, "calls_meteors", "meteor_fall")
+    blast = param(spec, "calls_meteors", "meteor_radius")
+    spread = param(spec, "calls_meteors", "meteor_spread")
+    damage = param(spec, "calls_meteors", "meteor_damage")
+
+    p = state.player
+    for i in range(count):
+        if i == 0:
+            # The first one is always dead on him.  Every other rock in the
+            # volley scatters around that point, so the volley still reads as
+            # "aimed at you" rather than as a random shower.
+            ox = oy = 0.0
+        else:
+            angle = state.streams.boss.between(0.0, math.tau)
+            reach = state.streams.boss.between(spread * 0.5, spread * 1.6)
+            ox, oy = math.cos(angle) * reach, math.sin(angle) * reach
+        state.hazards.append(Hazard(
+            kind="meteor",
+            x=g.clamp(p.x + ox, blast * 0.5, C.WIDTH - blast * 0.5),
+            y=g.clamp(p.y + oy, blast * 0.5, C.HEIGHT - blast * 0.5),
+            radius=blast,
+            # Staggered so a volley of five lands as a drum roll rather than as
+            # one indivisible event the player either ate or did not.
+            life=fall + i * 0.16,
+            strength=damage))
+    state.effects.append(Effect("call", monster.x, monster.y, 0.5, 0.5, 40))
+    state.emit(f"meteor_call:{spec.key}")
+
+
 # ── traits: hurt ─────────────────────────────────────────────────────
 @trait("frenzy", "hurt", label="狂化", note="受傷之後變快",
        params={"frenzy_factor": (1.35, "速度倍率")})
@@ -444,6 +615,70 @@ def frenzy(state: State, monster: Monster, payload: float = 0.0) -> None:
     spec = _spec(monster)
     monster.speed *= param(spec, "frenzy", "frenzy_factor")
     state.effects.append(Effect("frenzy", monster.x, monster.y, 0.4, 0.4))
+
+
+@trait("buds", "hurt", label="出芽",
+       note="每次被打到就掉下一塊自己，那塊會自己站起來走",
+       params={"bud_into": (0.0, "掉出來的是哪一種"),
+               "bud_every": (1.4, "最快隔多久才能再掉一塊"),
+               "bud_cap": (7.0, "場上最多幾塊"),
+               "bud_delay": (0.35, "掉出來多久才會動")})
+def buds(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Shed a smaller copy of itself each time it is hurt.
+
+    The candy slime's old trait was a syrup trail it laid so slowly, and which
+    dried so fast, that most players never noticed the boss had a mechanic at
+    all — it read as a large villager with a lot of health.
+
+    Budding on *hurt* rather than on a timer is what makes it a decision: every
+    swing the player lands buys damage and pays for it in bodies, so "burst it
+    down" and "chip it while clearing" become genuinely different plans instead
+    of the same plan at different speeds.
+
+    Two guards keep that from becoming a flood.  A cooldown, because a fast
+    lantern lands four hits a second and would bury the field; and a cap on
+    live children, because past a certain count the answer stops being *play
+    better* and starts being *there was nothing you could have done*.
+    """
+    spec = _spec(monster)
+    key = str(spec.params.get("bud_into", "slimeling"))
+    child = MONSTERS.get(key)
+    if child is None:
+        return
+
+    since = monster.memory.get("bud", 99.0)
+    if since < param(spec, "buds", "bud_every"):
+        return
+    live = sum(1 for other in state.monsters if other.spec == key)
+    if live >= int(param(spec, "buds", "bud_cap")):
+        return
+    monster.memory["bud"] = 0.0
+
+    # Pushed out to the side rather than dropped underfoot, so the player can
+    # see the thing separate from the parent instead of discovering it later.
+    angle = state.rng.random() * math.tau
+    reach = _spec(monster).radius + child.radius + 6.0
+    state.monsters.append(Monster(
+        spec=key,
+        x=g.clamp(monster.x + math.cos(angle) * reach, 8, C.WIDTH - 8),
+        y=g.clamp(monster.y + math.sin(angle) * reach, 8, C.HEIGHT - 8),
+        hp=child.hp, speed=child.speed,
+        wake=param(spec, "buds", "bud_delay"),
+        armour=int(child.param("armour"))))
+    state.effects.append(Effect("split", monster.x, monster.y, 0.35, 0.35))
+    state.emit(f"split:{spec.key}")
+
+
+@trait("buds", "tick", label="出芽",
+       note="每次被打到就掉下一塊自己，那塊會自己站起來走")
+def buds_tick(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Run the bud cooldown.
+
+    The counter has to advance every frame, not only on the frames the boss is
+    being hit — otherwise ``since`` never grows between hits and the very first
+    bud is the only one that ever appears.
+    """
+    monster.memory["bud"] = monster.memory.get("bud", 99.0) + C.FIXED_DT
 
 
 # ── traits: death ────────────────────────────────────────────────────
@@ -607,6 +842,19 @@ def reflects(state: State, monster: Monster, payload: float = 0.0) -> None:
     The actual test lives in the swing resolution, because it needs the angle of
     the incoming hit.  Registering it here is what puts it in the codex and what
     lets the validator accept the name.
+    """
+    return
+
+
+@trait("needs_soak", "spawn", label="燒紅",
+       note="燒得通紅，打上去只有火星；被水屬性技能澆到才會露出破綻")
+def needs_soak(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Marker only — the gate itself lives in ``rules.damage_target``.
+
+    Same arrangement as ``reflects``: the check needs information the trait
+    hooks do not carry (there, the angle of the incoming hit; here, the fact
+    that a hit is being resolved at all).  Registering the name here is what
+    puts it in the codex and what lets the content validator accept it.
     """
     return
 

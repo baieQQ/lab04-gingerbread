@@ -136,6 +136,22 @@ ROCK_CLEAR_ROCK: Final = 54.0
 WEAKNESS_MULTIPLIER: Final = 3.0
 #: Seconds a boss stays open after its weakness lands.
 WEAKNESS_WINDOW: Final = 3.0
+
+#: Shot kinds that rebound off the walls instead of expiring at them, and leave
+#: a patch of fire wherever they finally stop.
+BOUNCING_SHOTS: Final = ("fireball",)
+#: Shot kinds that pass straight through Gretel.  The hob and the moon-mage
+#: are fights *with Hansel*: if their attacks also ate her health the correct
+#: answer would be to fight them from the far corner of the map, which is the
+#: one thing this game must never reward.
+SPARES_SISTER: Final = ("fireball", "meteor")
+
+#: How often a patch of fire can take a half-heart off whoever stands in it.
+BURN_INTERVAL: Final = 0.75
+
+#: How far a boss lights itself while channelling.  Small — it is a beacon to
+#: walk toward, not a lamp that undoes the fog it just made.
+CHANNEL_LIGHT_RADIUS: Final = 58.0
 #: Damage multiplier while a boss is in that open state.
 EXPOSED_MULTIPLIER: Final = 2.0
 

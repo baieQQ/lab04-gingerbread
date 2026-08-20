@@ -76,6 +76,18 @@ RECIPES = {
     "sugar":      (0.26, [("sine", 1880, 1880, 0.34, hit), ("sine", 2820, 2820, 0.20, hit)]),
     "hurt":       (0.26, [("saw", 220, 120, 0.55, hit), ("noise", 700, 200, 0.30, hit)]),
     "down":       (0.55, [("sine", 260, 70, 0.75, hold)]),
+    # ── 王的招式 ─────────────────────────────────────────────────
+    "fireball":   (0.34, [("noise", 900, 260, 0.50, hit),
+                          ("saw", 340, 150, 0.35, hold)]),
+    "bounce":     (0.11, [("square", 520, 300, 0.30, hit)]),
+    "blaze":      (0.42, [("noise", 620, 180, 0.42, soft)]),
+    "fog_in":     (1.10, [("noise", 320, 90, 0.34, soft),
+                          ("sine", 130, 62, 0.32, soft)]),
+    "fog_clear":  (0.70, [("sine", 220, 620, 0.34, rise),
+                          ("noise", 700, 1800, 0.20, rise)]),
+    "meteor_call":(0.60, [("sine", 180, 520, 0.36, rise)]),
+    "meteor_hit": (0.60, [("sine", 130, 40, 0.95, hit),
+                          ("noise", 1900, 300, 0.55, hit)]),
     # A stand-in for a real recorded cry.  Eighty lines of arithmetic cannot
     # make a human sound hurt, and this one does not — it is here so the death
     # beat has *something* with a hard attack on it until the recording lands.

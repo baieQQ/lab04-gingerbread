@@ -155,6 +155,15 @@ def lights_of(state: "State") -> list[Light]:
     # is unanswerable — the player cannot go and deal with what they cannot
     # find — and unanswerable is not the same as hard.  ``source="tell"`` keeps
     # it out of ``FEARED_SOURCES``, so a wind-up never freezes anything.
+    # A boss that has planted itself to work is *lit* by the work.  Without
+    # this the reaper's fog would be a puzzle whose answer — go and hit the
+    # thing that is doing it — is hidden by the puzzle itself, and the player
+    # would be reduced to sweeping a black screen with a lantern.
+    for boss in state.bosses:
+        if boss.memory.get("planted", 0.0) > 0:
+            lights.append(Light(boss.x, boss.y, C.CHANNEL_LIGHT_RADIUS,
+                                cold=True, source="tell"))
+
     for monster in state.monsters:
         if monster.charge <= 0:
             continue
