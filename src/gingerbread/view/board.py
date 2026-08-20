@@ -403,6 +403,16 @@ class Board:
                                (int(boss.x), int(boss.y)),
                                int(spec.radius + 10), 2)
             self._seal(boss, spec, ticks)
+            if boss.stunned > 0:
+                # 頭上轉圈圈。被暈住的王站著不動，沒有這個的話畫面上它跟
+                # 「正在瞄準」長得一模一樣，玩家不知道現在是不是他的機會。
+                for i in range(3):
+                    a = ticks / 7.0 + i * math.tau / 3
+                    pygame.draw.circle(
+                        self.surface, P.SUGAR_BRIGHT,
+                        (int(boss.x + math.cos(a) * 15),
+                         int(boss.y - spec.radius - 16
+                             + math.sin(a) * 5)), 3)
             self._hp_pip(boss.x, boss.y, spec.radius,
                          boss.hp / max(1, boss.max_hp), width=72)
 

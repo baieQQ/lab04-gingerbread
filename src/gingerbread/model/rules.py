@@ -343,7 +343,19 @@ def damage_target(state: State, target: Monster, amount: int, *,
     traits = getattr(spec, "traits", ())
 
     # ── the mirror: a hit from the front does nothing at all ─────────
-    if "reflects" in traits and from_x is not None:
+    #
+    # 除非聖光正亮著。鏡子怪靠的是漢賽爾看不清楚自己站在它的哪一邊 —— 聖光
+    # 把那個條件拿掉，所以照著的時候正面也打得進去。這是這款遊戲最直接的一組
+    # 克制：光的技能，解掉靠黑暗吃飯的怪。
+    #
+    # 綁的是「聖光正在生效」，不是「場上剛好是亮的」。
+    #
+    # reveal_ticks 有兩個來源：聖光這個技能，以及「月光」這個夜間事件 —— 而
+    # 月光的設計註解明寫著「不會定住怕光的東西」。用 reveal_ticks 當條件的
+    # 話，一個隨機事件會把玩家花技能點換來的克制關係免費送出去十秒，還順便
+    # 推翻那個事件自己的設計。player.holy 只有聖光會設。
+    if ("reflects" in traits and from_x is not None
+            and state.player.holy <= 0):
         arc = float(getattr(spec, "params", {}).get("reflect_arc", 1.5))
         facing_x = C.SISTER_X - target.x
         facing_y = C.SISTER_Y - target.y
@@ -986,10 +998,23 @@ def _advance_hazards(state: State, dt: float) -> None:
             continue
 
         for target in state.monsters:
-            if not target.awake or target.buried > 0:
+            if not target.awake:
                 continue
             if g.distance(target.x, target.y, hazard.x, hazard.y) > hazard.radius:
                 continue
+            # 龍捲風把躲在地底的挖洞怪直接吸出來。
+            #
+            # 挖洞怪的規則是「鑽下去之後打不到，只能等它自己冒出來」，而那個
+            # 等待期間玩家什麼都做不了。風把它拔出來，等於給了這隻怪一個解 ——
+            # 這是風系技能唯一能做、而別的元素做不到的事。
+            if target.buried > 0:
+                if hazard.kind != "twister":
+                    continue
+                target.buried = 0.0
+                target.stunned = max(target.stunned, 0.5)
+                state.effects.append(Effect("surface", target.x, target.y,
+                                            0.4, 0.4))
+                state.emit(f"uprooted:{target.spec}")
             if hazard.charges == 0:
                 break
             hazard.sprung = True

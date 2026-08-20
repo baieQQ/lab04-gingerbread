@@ -375,6 +375,10 @@ class Game:
                         print(f"[gingerbread] {'靜音' if muted else '開聲音'}")
                     elif event.key == pygame.K_F9:
                         self._screenshot()
+                    elif event.key == pygame.K_F8:
+                        # 開圖。跟 F10 一樣是給我們自己測試用的。
+                        self.session.state = m.apply_action(
+                            self.session.state, "seeall")
                     elif event.key == pygame.K_F10:
                         # Test switch.  F10 rather than a letter so it cannot be
                         # hit while playing, and it goes through the model so

@@ -183,7 +183,10 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         key="bomber", name="自爆怪",
         hp=2, speed=52.0, radius=11.0, sugar=2,
         traits=("bursts",),
-        params={"blast_radius": 72.0, "blast_damage": 1},
+        # 46，因為揮燈距離是 60。72 的時候，站在攻擊範圍最外緣打它照樣被炸
+        # 到 —— 也就是說「保持距離」這個唯一的解法在數字上不存在，玩家每次
+        # 打它都要挨一下，而他無從得知自己做錯了什麼。
+        params={"blast_radius": 46.0, "blast_damage": 1},
         colour=(214, 122, 40), silhouette="child",
         step_hz=760.0),
 }

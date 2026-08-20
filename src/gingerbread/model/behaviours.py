@@ -120,7 +120,7 @@ def _ground_drag(state: State, monster: Monster) -> float:
     # 原本它只有「看得見」跟「周圍灼燒」兩件事，而看得見是被動的 —— 放完之後
     # 那八秒裡，這個技能對眼前那一群怪沒有任何影響。畏光讓「亮著」本身變成一
     # 個持續的優勢，也讓聖光和聖癒真正分開：一個壓制全場，一個保護一人。
-    if state.reveal_ticks > 0:
+    if state.player.holy > 0:
         slowest = min(slowest, C.HOLY_SLOW)
     for pool in state.puddles:
         if g.distance(monster.x, monster.y, pool.x, pool.y) <= pool.radius:
@@ -407,6 +407,15 @@ def fades(state: State, monster: Monster, payload: float = 0.0) -> None:
     That is the point rather than a limitation: this is the one monster that
     makes the player sweep the light across empty ground.
     """
+
+    # 聖光照著的時候，它不只現形 —— 它動不了。
+    #
+    # 隱形怪整隻怪只有一個賣點：你看不到它。光把那個賣點拿掉之後，剩下的是
+    # 一隻兩滴血的普通怪，那讓「帶聖光」這個決定在遇到它的夜晚變得明確。
+    if state.player.holy > 0:
+        monster.faded = 0.0
+        monster.frozen = True
+        return
     spec = _spec(monster)
     lit = (is_lit(state, monster.x, monster.y, lantern_only=True)
            or state.reveal_ticks > 0)
@@ -618,8 +627,10 @@ def calls_meteors(state: State, monster: Monster, payload: float = 0.0) -> None:
 # ── traits: hurt ─────────────────────────────────────────────────────
 @trait("blinks", "hurt", label="換位",
        note="被打中就閃到別的地方；但只要全場是亮的，它就釘在原地跑不掉",
-       params={"blink_every": (2.2, "最快隔多久才能再閃一次"),
-               "blink_ring": (250.0, "閃到離葛蕾特多遠的地方")})
+       params={"blink_every": (4.6, "最快隔多久才能再閃一次"),
+               "blink_ring": (250.0, "閃到離葛蕾特多遠的地方"),
+               "blink_daze": (1.2, "閃完站在原地暈多久"),
+               "blink_ready": (1.4, "暈完還要重新準備多久才開始拉弓")})
 def blinks(state: State, monster: Monster, payload: float = 0.0) -> None:
     """Vanish and reappear elsewhere when hit — unless the field is lit.
 
@@ -637,7 +648,7 @@ def blinks(state: State, monster: Monster, payload: float = 0.0) -> None:
     boss is the element the third night is about, and a player who brings light
     gets to fight it instead of chasing it.
     """
-    if state.reveal_ticks > 0:
+    if state.player.holy > 0:
         state.effects.append(Effect("pinned", monster.x, monster.y, 0.35, 0.35))
         state.emit("pinned")
         return
@@ -654,8 +665,17 @@ def blinks(state: State, monster: Monster, payload: float = 0.0) -> None:
     reach = state.streams.boss.between(ring * 0.75, ring * 1.15)
     monster.x = g.clamp(C.SISTER_X + math.cos(angle) * reach, 20, C.WIDTH - 20)
     monster.y = g.clamp(C.SISTER_Y + math.sin(angle) * reach, 20, C.HEIGHT - 20)
-    monster.charge = 0.0                 # whatever it was aiming is spoiled too
-    state.effects.append(Effect("blink_in", monster.x, monster.y, 0.4, 0.4, 40))
+    # 閃過去之後站在原地發暈。
+    #
+    # 沒有這一段的時候，它落地的同一格就能開始拉弓 —— 玩家跑過去、打中它、
+    # 它出現在場地另一頭並立刻蓄力，等於每一次成功的追擊只換到零點幾秒。暈眩
+    # 加上重新準備，讓「追到它」變成一段真正的空窗，那才是這場戰鬥的獎勵。
+    monster.charge = 0.0
+    monster.stunned = max(monster.stunned,
+                          param(spec, "blinks", "blink_daze"))
+    monster.memory["reload"] = max(monster.memory.get("reload", 0.0),
+                                   param(spec, "blinks", "blink_ready"))
+    state.effects.append(Effect("dizzy", monster.x, monster.y, 0.9, 0.9, 40))
     state.emit(f"blink:{spec.key}")
 
 
@@ -738,6 +758,18 @@ def buds_tick(state: State, monster: Monster, payload: float = 0.0) -> None:
     monster.memory["bud"] = monster.memory.get("bud", 99.0) + C.FIXED_DT
 
 
+def _soaked(state: State, monster: Monster) -> bool:
+    """站在水裡，或身上還帶著水系技能留下的濕氣。"""
+    if state.mist_ticks > 0:
+        return True
+    for hazard in state.hazards:
+        if hazard.kind in ("cage", "wave") and g.distance(
+                monster.x, monster.y, hazard.x, hazard.y) <= max(
+                    hazard.radius, hazard.reach):
+            return True
+    return False
+
+
 # ── traits: death ────────────────────────────────────────────────────
 @trait("splits", "death", label="分裂",
        note="死掉時裂成幾隻小的，要全部清掉才算",
@@ -807,6 +839,15 @@ def bursts(state: State, monster: Monster, payload: float = 0.0) -> None:
     matter at the moment the player is least thinking about it, and it is the
     one enemy the shove answers better than the lantern does.
     """
+
+    # 泡濕的火藥點不著。
+    #
+    # 水牢或怒潮碰過它之後，它死掉就只是死掉 —— 這是水系唯一能把「在葛蕾特
+    # 旁邊殺自爆怪」這個兩難拆掉的方法：平常你不敢在她旁邊打它，帶了水就敢。
+    if monster.memory.get("exposed", 0.0) > 0 or _soaked(state, monster):
+        state.effects.append(Effect("douse", monster.x, monster.y, 0.4, 0.4))
+        state.emit("fizzled")
+        return
     spec = _spec(monster)
     radius = param(spec, "bursts", "blast_radius")
     damage = int(param(spec, "bursts", "blast_damage"))

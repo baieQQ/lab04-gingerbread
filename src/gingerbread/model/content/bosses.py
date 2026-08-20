@@ -62,7 +62,8 @@ BOSSES: Final[dict[str, BossSpec]] = {
         hp=52, speed=36.0, radius=25.0, sugar=20,
         weakness="light",
         traits=("fades", "blinks"),
-        params={"fade": 0.8, "blink_every": 2.2, "blink_ring": 250.0},
+        params={"fade": 0.8, "blink_every": 4.6, "blink_ring": 250.0,
+                "blink_daze": 1.2, "blink_ready": 1.4},
         colour=(92, 96, 122),
         phases=(
             BossPhase(until_hp=0.5, behaviour="standoff",
@@ -164,7 +165,8 @@ BOSSES: Final[dict[str, BossSpec]] = {
         # noise — she should feel like she is choosing, not like the field is
         # malfunctioning.
         params={"fade": 0.7,
-                "blink_every": 3.4, "blink_ring": 230.0,
+                "blink_every": 5.2, "blink_ring": 230.0,
+                "blink_daze": 1.0, "blink_ready": 1.2,
                 "bud_into": "child", "bud_every": 3.2,
                 "bud_cap": 6, "bud_delay": 0.35,
                 "fire_every": 4.4, "fire_speed": 145.0,

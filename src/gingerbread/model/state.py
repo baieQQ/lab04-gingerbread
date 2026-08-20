@@ -84,6 +84,10 @@ class Meta:
     #: written into the snapshot — a cheat that a headless comparison could not
     #: see would make two different runs look identical.
     godmode: bool = False
+
+    #: 開圖：整片場地永遠亮著。跟 godmode 一樣寫在 meta 上而不是殼層，因為
+    #: 一個快照看不見的作弊，會讓兩局完全不同的遊戲在無頭比對裡長得一樣。
+    seeall: bool = False
     night: int = 1
     sugar: int = 0
 
@@ -418,6 +422,8 @@ class State:
         unfamiliar field rather than the dark one they had just failed in.
         Dawn is something the player earns; it is not what losing looks like.
         """
+        if self.meta.seeall:
+            return False              # 開圖：不畫黑暗遮罩
         return self.phase in (Phase.NIGHT, Phase.LOST) and self.dusk > 0
 
     def emit(self, name: str) -> None:

@@ -837,6 +837,8 @@ class PlayScene(Scene):
         # Reads the same condition the board does, so the badge cannot claim
         # daylight over a field that is still dark — which is what it did on
         # every losing frame.
+        if state.meta.seeall:
+            ui.text("開圖　F8 關閉", (ui.s(700), ui.s(33)), "small", P.SUGAR)
         night = state.phase is m.Phase.NIGHT or state.dark
         accent = P.NIGHT_BLUE if night else P.EMBER
         ui.panel(ui.box(12, 13, 68, 28), accent if not night else P.PANEL, accent)

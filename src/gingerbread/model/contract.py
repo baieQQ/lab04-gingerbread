@@ -200,6 +200,7 @@ def snapshot(state: State) -> dict[str, object]:
         "event": state.event,
         "event_ticks": state.event_ticks,
         "godmode": state.meta.godmode,
+        "seeall": state.meta.seeall,
         "light_scale": repr(round(state.light_scale, 9)),
         "fog_scale": repr(round(state.fog_scale, 9)),
         "reveal_ticks": state.reveal_ticks,
@@ -272,7 +273,7 @@ def parse_action(action: str) -> tuple[str, object]:
     nothing and raises immediately rather than after a deep copy.
     """
     if action in ("tick", "swing", "begin_night", "next_night", "retry",
-                  "whet", "oil", "godmode"):
+                  "whet", "oil", "godmode", "seeall"):
         return (action, None)
 
     if action.startswith("move:"):
@@ -376,6 +377,12 @@ def apply_action(state: State, action: str) -> State:
         # run played with it on can never be mistaken for a clean one.
         nxt.meta.godmode = not nxt.meta.godmode
         nxt.emit("godmode:on" if nxt.meta.godmode else "godmode:off")
+        return nxt
+
+    if verb == "seeall":
+        # 開圖。跟 godmode 一樣走 model，所以 HUD 和快照都知道它開著。
+        nxt.meta.seeall = not nxt.meta.seeall
+        nxt.emit("seeall:on" if nxt.meta.seeall else "seeall:off")
         return nxt
 
     raise ActionError(f"unhandled verb {verb!r}")     # pragma: no cover
