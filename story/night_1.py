@@ -560,9 +560,9 @@ def draw_end_card(surf):
     veil = pygame.Surface((WINDOW_W, WINDOW_H))
     veil.fill(COL_SILHOUETTE)
     surf.blit(veil, (0, 0))
-    label = end_font.render("第一幕　完", True, COL_TITLE)
+    label = end_font.render("夜晚　完", True, COL_TITLE)
     surf.blit(label, (WINDOW_W // 2 - label.get_width() // 2, WINDOW_H // 2 - 20 * SCALE))
-    sub = hint_font.render("更多內容 即將加入", True, COL_BONE)
+    sub = hint_font.render("敵人來襲", True, COL_BONE)
     surf.blit(sub, (WINDOW_W // 2 - sub.get_width() // 2, WINDOW_H // 2 + 10 * SCALE))
 
 
