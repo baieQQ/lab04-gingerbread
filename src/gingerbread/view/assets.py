@@ -136,6 +136,35 @@ class AssetLibrary:
         self._images[cache_key] = result
         return result
 
+    def fitted(self, key: str, span: int) -> pygame.Surface | None:
+        """Return the image scaled to fit a ``span``-wide box, aspect intact.
+
+        ``scaled`` takes an explicit size, and every caller in the renderer was
+        passing a square one — so a sprite drawn 540×600 (which four of the
+        first five are) was squashed by a tenth of its height on every frame.
+        Art arrives at whatever shape the artist drew it, and the game should
+        not silently reshape it; it should decide how *tall* to make it and let
+        the width follow.
+
+        Pixel art is scaled with ``scale`` rather than ``smoothscale``: hard
+        square blocks are the entire style, and smoothing them turns a
+        deliberate 9×10 grid into mush.
+        """
+        source = self.image(key)
+        if source is None:
+            return None
+        w, h = source.get_size()
+        if not w or not h:
+            return None
+        height = span
+        width = max(1, int(round(w * height / h)))
+        cache_key = f"{key}#fit{width}x{height}"
+        hit = self._images.get(cache_key)
+        if hit is None:
+            hit = self._images[cache_key] = pygame.transform.scale(
+                source, (width, height))
+        return hit
+
     # ── audio ────────────────────────────────────────────────────────
     def sound(self, key: str) -> pygame.mixer.Sound | None:
         """Return a sound effect, or ``None`` if absent or the mixer is off."""

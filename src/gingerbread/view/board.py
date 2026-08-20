@@ -305,7 +305,7 @@ class Board:
         # landed first are 600 px tall for a monster the rules give a radius of
         # eleven — so a raw blit puts a sprite sixty times too big on the field.
         span = max(8, int(radius * 3.4))
-        art = self.assets.scaled(f"monster.{key}", (span, span)) if key else None
+        art = self.assets.fitted(f"monster.{key}", span) if key else None
         F.shadow(self.surface, x, y, radius)
         if art is not None:
             # Lifted so the feet sit on the shadow rather than the waist.
@@ -571,10 +571,12 @@ class Board:
     def _draw_sister(self, state: State, ticks: int) -> None:
         bob = math.sin(ticks / 37.0) * 1.2
         x, y = C.SISTER_X, C.SISTER_Y + bob
-        art = self.assets.image("char.gretel")
+        # Scaled to her radius rather than blitted at whatever size the file
+        # happens to be.  ``image`` put a 720 px drawing on a 13 px girl.
+        art = self.assets.fitted("char.gretel", 44)
         if art is not None:
             F.shadow(self.surface, x, y, 14)
-            self.surface.blit(art, art.get_rect(center=(int(x), int(y))))
+            self.surface.blit(art, art.get_rect(midbottom=(int(x), int(y + 13))))
         else:
             F.shadow(self.surface, x, y, 13)
             # She is the only pale figure on the field and the only one with
@@ -718,7 +720,7 @@ class Board:
             pygame.draw.circle(self.surface, P.MOON, (int(p.x), int(p.y)),
                                radius, 2)
 
-        art = self.assets.image("char.hansel")
+        art = self.assets.fitted("char.hansel", 46)
         blink = p.invulnerable > 0 and (ticks // 5) % 2
         coat = (74, 88, 126)          # cold blue: nothing hunting her is cold
         body = P.mix(coat, P.PANEL, 0.55) if blink else coat
@@ -729,7 +731,10 @@ class Board:
         F.shadow(self.surface, p.x, p.y, C.PLAYER_RADIUS, lift=p.dash * 30)
 
         if art is not None:
-            self.surface.blit(art, art.get_rect(center=(int(p.x), int(p.y))))
+            # Feet on the shadow, like every monster sprite — a sprite centred
+            # on the rules' point stands with its waist on the ground.
+            self.surface.blit(art, art.get_rect(
+                midbottom=(int(p.x), int(p.y + C.PLAYER_RADIUS))))
         else:
             # Hansel wears cold colours; everything hunting Gretel is warm-red.
             # Two seconds into the first night the player can already tell which

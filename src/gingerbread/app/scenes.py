@@ -25,6 +25,7 @@ from ..model.content import BEATS, BOSSES, ENDLESS_BEAT, EVENTS, MONSTERS
 from ..model.content import newcomers
 from ..model.content import SPELLS as SPELL_TABLE
 from ..model.content import stage_for
+from ..model.content.stages import STAGES
 from ..model.content.elements import ELEMENTS
 from ..model.content.upgrades import SHOP_ORDER, UPGRADES
 from ..model.registry import describe_mechanic
@@ -448,6 +449,185 @@ class PrologueScene(Scene):
                 self.revealed = True
 
 
+# ── the seven nights, as a map ───────────────────────────────────────
+class MapScene(Scene):
+    """Where the campaign lives between nights.
+
+    Seven nights told as seven numbers on a HUD is a list of chores.  The same
+    seven drawn as a path out of the village and into the deep forest is a
+    journey, and the only difference is that the player can see where they have
+    been and what is still in front of them.
+
+    Everything here is read from ``STAGES`` and ``BOSSES``: the node captions,
+    the boss names, the taglines.  Nothing about the campaign is written twice,
+    so re-ordering a night or renaming a boss moves the map with it.
+    """
+
+    #: One point per night, roughly left-to-right and rising — out of the
+    #: village at the bottom left, into the trees at the top right.
+    NODES = ((104, 424), (204, 336), (316, 392), (440, 288),
+             (560, 344), (678, 236), (800, 300))
+
+    #: Seconds for the trail to draw itself in on arrival.
+    DRAW_IN = 0.85
+
+    def __init__(self, app_state) -> None:
+        self.g = app_state
+        self.t = 0.0
+
+    def update(self, app: SceneStack, ui: UI, dt: float) -> None:
+        self.t += dt
+        state = self.g.state
+        night = max(1, min(m.constants.CAMPAIGN_NIGHTS, state.meta.night))
+        best = self.g.saved.best_night
+
+        ui.veil(252)
+        self._scenery(ui)
+        ui.text("七夜", (ui.s(MID), ui.s(52)), "title", P.EMBER, "center")
+        ui.text("從村子的廣場，一路走回那間屋子。",
+                (ui.s(MID), ui.s(88)), "small", P.BONE_DIM, "center")
+
+        drawn = min(1.0, self.t / self.DRAW_IN)
+        self._landmarks(ui, night)
+        self._trail(ui, night, drawn)
+        for index, (x, y) in enumerate(self.NODES):
+            self._node(ui, index, x, y, night, best, drawn)
+
+        self._caption(ui, night)
+
+        ready = drawn >= 1.0
+        label = "走進第 %d 夜" % night
+        if ui.button("go", ui.box(MID - 140, 578, 280, 46), label,
+                     enabled=ready):
+            app.pop()
+        if ready and (pygame.K_SPACE in ui.keys or pygame.K_RETURN in ui.keys):
+            app.pop()
+
+    # ── pieces ───────────────────────────────────────────────────────
+    def _scenery(self, ui: UI) -> None:
+        """A few trees, so the path is crossing something.
+
+        Positions come from an integer hash rather than a random draw: the map
+        must look the same every time it is opened, or it stops reading as a
+        place and starts reading as a screensaver.
+        """
+        for i in range(34):
+            h = (i * 2654435761) & 0xFFFFFFFF
+            x = 40 + (h % 830)
+            y = 150 + ((h >> 9) % 300)
+            size = 8 + ((h >> 17) % 11)
+            near = min(abs(x - nx) + abs(y - ny) for nx, ny in self.NODES)
+            if near < 46:
+                continue                  # never on top of a node
+            shade = P.mix(P.INK, P.NIGHT_BLUE, 0.35 + (h >> 21 & 7) / 22.0)
+            pygame.draw.polygon(ui.surface, shade, [
+                (ui.s(x), ui.s(y - size)),
+                (ui.s(x - size * 0.55), ui.s(y + size * 0.6)),
+                (ui.s(x + size * 0.55), ui.s(y + size * 0.6))])
+
+    def _landmarks(self, ui: UI, night: int) -> None:
+        """The two ends of the road, drawn as what they are.
+
+        The subtitle says "out of the village square, back to that house".  A
+        line of numbered circles does not say that; a cluster of roofs at one
+        end and a gingerbread house at the other does, without a word.
+        """
+        vx, vy = self.NODES[0]
+        for dx, dy, w in ((-34, 6, 13), (-16, 14, 10), (-46, 18, 9)):
+            base = ui.s(vy + dy)
+            left = ui.s(vx + dx - w)
+            pygame.draw.rect(ui.surface, P.mix(P.INK, P.BONE_DIM, 0.30),
+                             pygame.Rect(left, base - ui.s(w),
+                                         ui.s(w * 2), ui.s(w)))
+            pygame.draw.polygon(ui.surface, P.mix(P.INK, P.EMBER, 0.30), [
+                (left, base - ui.s(w)),
+                (ui.s(vx + dx), base - ui.s(w * 2)),
+                (left + ui.s(w * 2), base - ui.s(w))])
+
+        # The house at the end, iced and lit only once you can see it coming.
+        hx, hy = self.NODES[-1]
+        hx, hy = hx + 44, hy - 6
+        known = night >= len(self.NODES)
+        wall = P.mix(P.INK, P.SUGAR, 0.55 if known else 0.16)
+        roof = P.mix(P.INK, P.BOSS, 0.70 if known else 0.20)
+        pygame.draw.rect(ui.surface, wall,
+                         pygame.Rect(ui.s(hx - 17), ui.s(hy - 2),
+                                     ui.s(34), ui.s(24)))
+        pygame.draw.polygon(ui.surface, roof, [
+            (ui.s(hx - 23), ui.s(hy - 2)), (ui.s(hx), ui.s(hy - 24)),
+            (ui.s(hx + 23), ui.s(hy - 2))])
+        if known:
+            pygame.draw.rect(ui.surface, P.EMBER,
+                             pygame.Rect(ui.s(hx - 4), ui.s(hy + 10),
+                                         ui.s(8), ui.s(12)))
+
+    def _trail(self, ui: UI, night: int, drawn: float) -> None:
+        """Dotted path between the nodes, warm behind you and cold ahead."""
+        total = len(self.NODES) - 1
+        for i in range(total):
+            (ax, ay), (bx, by) = self.NODES[i], self.NODES[i + 1]
+            share = max(0.0, min(1.0, drawn * total - i))
+            if share <= 0:
+                break
+            walked = i + 1 < night
+            colour = P.EMBER if walked else P.LINE
+            steps = 13
+            for k in range(steps):
+                f = (k + 0.5) / steps
+                if f > share:
+                    break
+                px = ui.s(ax + (bx - ax) * f)
+                py = ui.s(ay + (by - ay) * f)
+                pygame.draw.circle(ui.surface, colour, (px, py),
+                                   max(1, ui.s(2)))
+
+    def _node(self, ui: UI, index: int, x: float, y: float,
+              night: int, best: int, drawn: float) -> None:
+        if drawn * len(self.NODES) < index:
+            return
+        stage = STAGES.get(index + 1)
+        number = index + 1
+        done = number < night or number <= best
+        here = number == night
+        pos = (ui.s(x), ui.s(y))
+
+        if here:
+            # The one you are about to walk into breathes.  Nothing else on the
+            # screen moves, so this is the only thing the eye can land on.
+            pulse = 0.5 + math.sin(self.t * 3.4) * 0.5
+            pygame.draw.circle(ui.surface, P.EMBER, pos,
+                               ui.s(int(20 + pulse * 7)), max(1, ui.s(2)))
+        radius = ui.s(15 if here else 11)
+        fill = P.EMBER if done else (P.PANEL if here else P.INK)
+        edge = P.EMBER if (done or here) else P.LINE
+        pygame.draw.circle(ui.surface, fill, pos, radius)
+        pygame.draw.circle(ui.surface, edge, pos, radius, max(1, ui.s(2)))
+
+        ink = (20, 13, 2) if done else (P.EMBER if here else P.MUTED)
+        ui.text(str(number), pos, "small", ink, "center")
+
+        boss = BOSSES.get(stage.boss) if stage and stage.boss else None
+        if boss is not None:
+            name = boss.name if (done or here) else "？？？"
+            ui.text(name, (pos[0], pos[1] + ui.s(26)), "tiny",
+                    P.BOSS if (done or here) else P.MUTED, "center")
+
+    def _caption(self, ui: UI, night: int) -> None:
+        """What tonight is, in the words the stage table already uses."""
+        box = ui.box(MID - 340, 488, 680, 74)
+        ui.panel(box, P.INK, P.LINE)
+        stage = STAGES.get(night)
+        beat = BEATS.get(night)
+        head = f"第 {night} 夜"
+        if beat is not None:
+            head += f"　·　{beat.heading}"
+        ui.text(head, (box.centerx, box.top + ui.s(22)), "body",
+                P.EMBER, "center")
+        if stage is not None:
+            ui.text(stage.tagline, (box.centerx, box.top + ui.s(50)),
+                    "small", P.BONE_DIM, "center")
+
+
 # ── play ─────────────────────────────────────────────────────────────
 class PlayScene(Scene):
     """The game: HUD, board, and — in daylight — the preparation panel."""
@@ -499,6 +679,12 @@ class PlayScene(Scene):
         if state.phase is m.Phase.DAY and g.story_shown != state.meta.night:
             g.story_shown = state.meta.night
             app.push(StoryScene(g))
+            # Pushed *after* the story card so it lands on top of it: the map
+            # first — here is where you are, here is what is left — and the
+            # night's own words underneath once the map is dismissed.  Endless
+            # has no seven nights to draw, so it never sees this.
+            if state.meta.mode is m.Mode.CAMPAIGN:
+                app.push(MapScene(g))
             return
 
         if state.phase is m.Phase.SHOP:
