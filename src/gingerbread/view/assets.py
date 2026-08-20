@@ -136,6 +136,13 @@ class AssetLibrary:
         self._images[cache_key] = result
         return result
 
+    #: Source-to-target ratio past which ``fitted`` averages instead of
+    #: sampling.  Eight is comfortably above the coarse art (9 blocks into a
+    #: 40 px monster is ~13, but each block is a flat colour so sampling is
+    #: exact) and below the fine art, which is where sampling starts to lose
+    #: whole features.
+    SMOOTH_ABOVE = 8.0
+
     def fitted(self, key: str, span: int) -> pygame.Surface | None:
         """Return the image scaled to fit a ``span``-wide box, aspect intact.
 
@@ -146,9 +153,22 @@ class AssetLibrary:
         not silently reshape it; it should decide how *tall* to make it and let
         the width follow.
 
-        Pixel art is scaled with ``scale`` rather than ``smoothscale``: hard
-        square blocks are the entire style, and smoothing them turns a
-        deliberate 9×10 grid into mush.
+        Which filter to use depends on how far the art has to come down.
+
+        ``scale`` (nearest) keeps hard square edges, which is right for art
+        already drawn on a coarse grid — the first four monsters are 9×10
+        blocks, and smoothing those turns a deliberate style into mush.
+
+        ``smoothscale`` is right for anything drawn finely enough that nearest
+        would be *sampling* rather than *scaling*.  The boss art is roughly
+        1200 px of detailed pixel work landing in a 95 px box: picking one
+        source pixel out of every thirteen throws away nine tenths of the
+        drawing and what survives shimmers as the boss walks.  Averaging keeps
+        the shape.
+
+        Measured rather than assumed — both were rendered at real game size and
+        compared side by side, and at these ratios the difference is the
+        difference between a hooded archer and a grey smudge.
         """
         source = self.image(key)
         if source is None:
@@ -161,8 +181,10 @@ class AssetLibrary:
         cache_key = f"{key}#fit{width}x{height}"
         hit = self._images.get(cache_key)
         if hit is None:
-            hit = self._images[cache_key] = pygame.transform.scale(
-                source, (width, height))
+            fine = h > height * self.SMOOTH_ABOVE
+            resize = (pygame.transform.smoothscale if fine
+                      else pygame.transform.scale)
+            hit = self._images[cache_key] = resize(source, (width, height))
         return hit
 
     # ── audio ────────────────────────────────────────────────────────
