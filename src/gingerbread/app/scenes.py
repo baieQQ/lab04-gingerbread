@@ -512,7 +512,10 @@ class PlayScene(Scene):
     def _hud(self, ui: UI, state: m.State) -> None:
         ui.panel(ui.box(0, 0, 900, HUD_H), P.PANEL, P.LINE)
 
-        night = state.phase is m.Phase.NIGHT
+        # Reads the same condition the board does, so the badge cannot claim
+        # daylight over a field that is still dark — which is what it did on
+        # every losing frame.
+        night = state.phase is m.Phase.NIGHT or state.dark
         accent = P.NIGHT_BLUE if night else P.EMBER
         ui.panel(ui.box(12, 13, 68, 28), accent if not night else P.PANEL, accent)
         ui.text("夜晚" if night else "白天", (ui.s(46), ui.s(27)), "small",
@@ -702,6 +705,11 @@ class PlayScene(Scene):
                                  shelf_w, 46 * 4, gap=5)
 
         order = {"thunder": 0, "light": 1, "wind": 2, "water": 3}
+        # Every row is remembered so the strip below can print whichever one the
+        # player is pointing at.  A shelf this narrow truncates every
+        # description to about ten characters, and a skill nobody can read the
+        # rules of is a skill nobody picks on purpose.
+        rows: list[tuple[pygame.Rect, object, int]] = []
         for key, spec in sorted(SPELL_TABLE.items(),
                                 key=lambda kv: (kv[1].tier,
                                                 order.get(kv[1].element, 9))):
@@ -709,12 +717,22 @@ class PlayScene(Scene):
             element = ELEMENTS.get(spec.element, {}).get("name", "")
             tag = "已學會" if known else "1 點"
             sub = ui.truncate(spec.description, ui.s(shelf_w - 24), "small")
-            if ui.button(f"learn:{key}", columns[spec.tier].slot(ui.s(44)),
-                         f"{spec.name}（{element}）　{spec.cooldown:.0f} 秒　{tag}",
-                         sub, enabled=not known and
-                         state.meta.points_for(spec.tier) >= spec.cost,
-                selected=known):
+            cell = columns[spec.tier].slot(ui.s(44))
+            can = (not known
+                   and state.meta.points_for(spec.tier) >= spec.cost)
+            # The nav index a live button is about to claim, so keyboard focus
+            # can drive the strip too.  Disabled rows never claim one.
+            nav = ui._nav if can and not ui.inert else -1
+            # Name, element and price only.  The cooldown moved to the strip:
+            # four facts do not fit in 179 px and the one that was falling off
+            # the end was whether the player could afford it.
+            if ui.button(f"learn:{key}", cell,
+                         f"{spec.name}（{element}）　{tag}",
+                         sub, enabled=can, selected=known):
                 self.g.act(f"learn:{key}")
+            rows.append((cell, spec, nav))
+
+        self._skill_detail(ui, rows)
 
         # ── the two carried slots ────────────────────────────────────
         # Directly under the two shelves, not below a column that no longer
@@ -750,6 +768,53 @@ class PlayScene(Scene):
         if ui.button("night", ui.box(MID - 140, 566, 280, 48), "天黑",
                      why, enabled=ready):
             self.g.act("begin_night")
+
+    #: Where the full text of the pointed-at skill is printed, and how wide.
+    DETAIL_Y = 470
+    DETAIL_W = 780
+
+    def _skill_detail(self, ui: UI, rows) -> None:
+        """Print the whole description of whichever skill is being pointed at.
+
+        The eight shelves are 179 px wide, which fits roughly ten Chinese
+        characters — so every description was cut mid-sentence and the player
+        chose skills by name alone.  Widening the shelf is not available (there
+        are two columns and an upgrade list beside them), so the text moves to
+        the one place with room: a full-width strip under both shelves, in the
+        gap that was already there between the slots and the 天黑 button.
+
+        Mouse position wins over keyboard focus, because if the pointer is over
+        a row that is unambiguously the row being asked about.
+        """
+        shown = None
+        for cell, spec, _nav in rows:
+            if cell.collidepoint(ui.mouse):
+                shown = spec
+                break
+        if shown is None and ui.keyboard:
+            for _cell, spec, nav in rows:
+                if nav >= 0 and nav == ui.focus:
+                    shown = spec
+                    break
+
+        box = ui.box(MID - self.DETAIL_W // 2, self.DETAIL_Y,
+                     self.DETAIL_W, 58)
+        ui.panel(box, P.INK, P.LINE)
+        if shown is None:
+            ui.text("把游標移到技能上，這裡會顯示完整說明",
+                    (box.centerx, box.centery), "small", P.BONE_DIM, "center")
+            return
+
+        element = ELEMENTS.get(shown.element, {}).get("name", "")
+        head = (f"{shown.name}（{element}·{shown.tier} 階）"
+                f"　冷卻 {shown.cooldown:.0f} 秒")
+        ui.text(head, (box.left + ui.s(14), box.top + ui.s(15)),
+                "small", shown.colour)
+        lines = ui.wrap(shown.description, ui.s(self.DETAIL_W - 28), "small")
+        step = ui.book.line_height("small") + ui.s(2)
+        for i, line in enumerate(lines[:2]):
+            ui.text(line, (box.left + ui.s(14),
+                           box.top + ui.s(34) + i * step), "small", P.BONE)
 
     def _cycle_slot(self, state: m.State, index: int) -> None:
         """Put the next learned skill of *this slot's tier* into it.
@@ -1309,12 +1374,62 @@ class ChoiceScene(Scene):
 
 # ── result ───────────────────────────────────────────────────────────
 class ResultScene(Scene):
+    """The run is over — but not, for the first two seconds, out of sight.
+
+    It used to slam a 246-alpha veil over the field on the very frame Gretel
+    was taken, so the moment the player lost was the one moment they were not
+    allowed to look at.  Both the teaching staff and every playtester read that
+    as the game cutting away from its own ending.
+
+    So the last frame is captured and held, then faded out under the menu.  The
+    hold is short and skippable — at a booth the next person is waiting — but it
+    is the difference between "I lost" and "I watched myself lose".
+    """
+
+    #: Seconds the untouched final frame stays on screen before anything moves.
+    HOLD = 0.45
+    #: Seconds the frozen frame takes to fade away under the menu.
+    FADE = 1.35
+    #: How much of the frame is still visible once the fade has finished.
+    RESIDUE = 26
+
     def __init__(self, app_state) -> None:
         self.g = app_state
+        self.t = 0.0
+        self._frozen: pygame.Surface | None = None
+
+    def enter(self, app: SceneStack) -> None:
+        # PlayScene drew this frame moments ago, in the same pass that pushed
+        # us — so the surface still holds the exact instant the run ended.
+        self._frozen = app.ui.surface.copy()
+
+    def _curtain(self, ui: UI, dt: float) -> float:
+        """Draw the fading final frame.  Returns 0→1 progress through it."""
+        self.t += dt
+        k = max(0.0, min(1.0, (self.t - self.HOLD) / self.FADE))
+        # Any press skips ahead.  A queue of people at a booth will not wait
+        # through two seconds of atmosphere for the button they already know is
+        # coming, and forcing them to is how a demo loses its queue.
+        if k < 1.0 and (ui.down or ui.activate):
+            self.t = self.HOLD + self.FADE
+            ui.activate = False
+            k = 1.0
+        if self._frozen is None:
+            ui.veil(int(246 * k))
+            return k
+        ui.veil(255)
+        # Eased so it lingers on the image and then leaves quickly, rather than
+        # spending the whole fade in an unreadable middle grey.
+        alpha = int(255 - (255 - self.RESIDUE) * (k * k))
+        self._frozen.set_alpha(alpha)
+        ui.surface.blit(self._frozen, (0, 0))
+        return k
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
         state = self.g.state
-        ui.veil(246)
+        k = self._curtain(ui, dt)
+        if k < 1.0:
+            return                          # nothing to read, nothing to click
         won = state.phase is m.Phase.VICTORY
 
         ui.text("第一個冬天過去了" if won else "葛蕾特不見了",

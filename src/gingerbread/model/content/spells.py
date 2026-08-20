@@ -31,11 +31,13 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     # ── 一階 · 一點技能點 ───────────────────────────────────────────
     "bolt": SpellSpec(
         key="bolt", name="閃電", element="thunder", tier=1,
-        description="以自己為中心劈下閃電，清空範圍內的敵人。長按可蓄力放大範圍",
-        cost=1, cooldown=20.0, duration=0.0,
-        effect="smite", charge=True,
-        params={"radius": 26.0, "radius_max": 50.0, "push": 70.0,
-                "boss": 4.0},
+        description="立刻劈下閃電，把周圍的敵人狠狠震開，"
+                    "落點會留下一片電焦的地面，走進去的都變慢",
+        cost=1, cooldown=16.0, duration=0.0,
+        effect="smite",
+        params={"radius": 54.0, "damage": 2.0, "push": 165.0,
+                "boss": 5.0, "slow": 0.4, "slow_life": 3.5,
+                "slow_radius": 66.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(

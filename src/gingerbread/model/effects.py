@@ -67,29 +67,57 @@ def _kill_within(state: State, x: float, y: float, radius: float,
 
 
 # ── 一階 ─────────────────────────────────────────────────────────────
-@spell("smite", label="閃電", note="以主角為中心劈下閃電，可長按蓄力增加範圍",
-       params={"radius": (26.0, "不蓄力時的半徑"),
-               "radius_max": (50.0, "蓄滿時的半徑"),
-               "push": (70.0, "擊退距離")})
+@spell("smite", label="閃電",
+       note="立刻在腳下劈下閃電：震開周圍的敵人，並留下一片電焦的地面",
+       params={"radius": (54.0, "打得到多寬"),
+               "damage": (2.0, "扣多少血"),
+               "push": (165.0, "擊退距離"),
+               "slow": (0.4, "焦地上剩幾成速度"),
+               "slow_life": (3.5, "焦地留多久"),
+               "slow_radius": (66.0, "焦地多寬")})
 def smite(state: State, spec) -> None:
-    """雷 · 閃電 — small, absolute, and worth aiming.
+    """雷 · 閃電 — control, not deletion.
 
-    It empties the health bar of whatever is inside it, so the question is
-    never "will this be enough" — it is "how many can I get inside a circle
-    fifty pixels across", which is a positioning problem, and positioning is
-    the only thing this game asks the player to be good at.
+    It used to empty the health bar of everything in the circle, and it was
+    charged.  Both were wrong for the same reason: the skill answered the
+    question "is the field clear yet" instead of "where do I want them to be".
+    A charge asks the player to hold a key while eight things walk at their
+    sister, which is the one moment in the game they cannot spare a thumb for.
+
+    So it fires the instant it is pressed, kills almost nothing, and *moves*
+    everything — a hard shove outward plus a patch of scorched ground that
+    slows whatever tries to walk back in.  That turns it into space, which is
+    the currency a defender actually spends.
     """
-    p = state.player
-    charge = min(1.0, p.charge_time / C.CHARGE_MAX) if p.charge_time else 0.0
-    low = float(spec.params.get("radius", 26.0))
-    high = float(spec.params.get("radius_max", 50.0))
-    radius = low + (high - low) * charge
+    from .rules import _push as shove, damage_target
 
-    _kill_within(state, p.x, p.y, radius, spec.element,
-                 push=float(spec.params.get("push", 70.0)),
-                 boss=int(spec.params.get("boss", 4)) + int(round(charge * 4)))
+    p = state.player
+    radius = float(spec.params.get("radius", 54.0))
+    damage = int(spec.params.get("damage", 2))
+    push = float(spec.params.get("push", 165.0))
+    boss_damage = int(spec.params.get("boss", 5))
+
+    for target in _targets(state):
+        if g.distance(target.x, target.y, p.x, p.y) > radius:
+            continue
+        shove(target, p.x, p.y, push)
+        amount = boss_damage if target in state.bosses else damage
+        if amount > 0:
+            damage_target(state, target, amount, element=spec.element,
+                          from_x=p.x, from_y=p.y)
+
+    # The scorch is the half of the skill that lasts.  Reusing ``Puddle`` means
+    # the slow flows through the same ``_ground_drag`` every other surface uses,
+    # so nothing downstream has to learn about lightning.
+    state.puddles.append(Puddle(
+        x=p.x, y=p.y,
+        radius=float(spec.params.get("slow_radius", 66.0)),
+        kind="shock",
+        slow=float(spec.params.get("slow", 0.4)),
+        life=float(spec.params.get("slow_life", 3.5))))
+
     state.effects.append(Effect("bolt", p.x, p.y, 0.35, 0.35, radius))
-    state.feedback.bump(shake=8.0 + 6.0 * charge, freeze=0.06 + 0.04 * charge)
+    state.feedback.bump(shake=10.0, freeze=0.07)
     _expose_matching(state, spec)
 
 

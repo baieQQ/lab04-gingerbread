@@ -76,6 +76,12 @@ RECIPES = {
     "sugar":      (0.26, [("sine", 1880, 1880, 0.34, hit), ("sine", 2820, 2820, 0.20, hit)]),
     "hurt":       (0.26, [("saw", 220, 120, 0.55, hit), ("noise", 700, 200, 0.30, hit)]),
     "down":       (0.55, [("sine", 260, 70, 0.75, hold)]),
+    # A stand-in for a real recorded cry.  Eighty lines of arithmetic cannot
+    # make a human sound hurt, and this one does not — it is here so the death
+    # beat has *something* with a hard attack on it until the recording lands.
+    "scream":     (0.80, [("saw", 700, 150, 0.60, hold),
+                          ("saw", 1050, 280, 0.28, hit),
+                          ("noise", 2400, 600, 0.30, hit)]),
     "sister_hit": (0.40, [("sine", 300, 180, 0.60, hold), ("sine", 318, 190, 0.55, hold)]),
     "douse":      (0.44, [("noise", 2200, 300, 0.42, hold)]),
     "cast":       (0.36, [("sine", 300, 1500, 0.48, soft), ("sine", 450, 2250, 0.22, soft)]),

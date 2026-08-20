@@ -225,7 +225,16 @@ ENDLESS_CHOICE_SECONDS: Final = 45.0
 #: four action points a campaign night opens with — otherwise it is the same
 #: game played permanently under-equipped, which measured as death in under
 #: thirty seconds.
-ENDLESS_STARTING_KIT: Final = (("lantern", 1), ("shade", 1), ("grip", 2))
+ENDLESS_STARTING_KIT: Final = (("lantern", 1), ("shade", 1))
+
+#: The two skills an endless run opens with, one per shelf.
+#:
+#: Endless has no day, and learning a skill is gated on the day phase —
+#: so without this the mode shipped with two permanently dead keys and a
+#: HUD that promised skill points the player could never spend.  Granting
+#: them at the start is the honest fix: the campaign is where *choosing*
+#: skills is the game, and endless is where surviving with them is.
+ENDLESS_DEFAULT_SKILLS: Final = ("bolt", "windrun")
 
 #: Seconds of grace before arrivals begin, so the first thing a player sees is
 #: the field rather than a monster already on top of them.

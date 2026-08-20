@@ -64,7 +64,10 @@ EVENT_SOUNDS: Final[dict[str, str]] = {
     "nightfall": "nightfall",
     "dawn": "dawn",
     "victory": "victory",
-    "lost": "lost",
+    # The death beat.  A cry, not the old soft two-note fall — the moment the
+    # run ends is the one the player remembers, and it was the quietest sound
+    # in the game.
+    "lost": "scream",
     "bought:": "buy",
     "learned:": "buy",
 }

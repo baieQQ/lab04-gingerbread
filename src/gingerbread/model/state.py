@@ -344,8 +344,15 @@ class State:
 
     @property
     def dark(self) -> bool:
-        """True once it is night and the fade has begun."""
-        return self.phase is Phase.NIGHT and self.dusk > 0
+        """True once it is night and the fade has begun.
+
+        ``LOST`` counts.  A run only ends at night, and dropping the darkness on
+        the frame Gretel is taken switched every light in the forest on at the
+        exact moment the player lost — so the last thing they saw was a bright,
+        unfamiliar field rather than the dark one they had just failed in.
+        Dawn is something the player earns; it is not what losing looks like.
+        """
+        return self.phase in (Phase.NIGHT, Phase.LOST) and self.dusk > 0
 
     def emit(self, name: str) -> None:
         """Record that something happened, for the shell to react to."""

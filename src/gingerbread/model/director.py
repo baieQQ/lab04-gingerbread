@@ -32,6 +32,7 @@ from . import rules
 from .content import EVENTS, MAPS, stage_for
 from .content.maps import ENDLESS_ROTATION
 from .content.monsters import ENDLESS_POOL
+from .content.spells import SPELLS
 from .content.upgrades import ENDLESS_OFFER, UPGRADES
 from .state import Mode, Phase, State, to_ticks
 
@@ -249,9 +250,41 @@ class EndlessDirector:
         state.meta.sister_hp = C.ENDLESS_SISTER_HP
 
         # Stand-in for the four action points a campaign night opens with.
+        # Clamped, because a lost endless run is retried by rebuilding the state
+        # from the carried meta — so without a ceiling four retries walked the
+        # lantern to level five on a spec whose maximum is four.
         for key, levels in C.ENDLESS_STARTING_KIT:
-            if key in UPGRADES:
-                state.meta.upgrades[key] = state.meta.level(key) + levels
+            spec = UPGRADES.get(key)
+            if spec is not None:
+                state.meta.upgrades[key] = min(
+                    spec.max_level, state.meta.level(key) + levels)
+
+        self._grant_default_skills(state)
+
+    @staticmethod
+    def _grant_default_skills(state: State) -> None:
+        """Hand endless its two skills outright, one per shelf.
+
+        Learning and equipping are both gated on the day phase, and endless
+        never leaves ``NIGHT`` — so the mode shipped with a HUD advertising
+        skill points that no input could ever spend, and two dead keys.  Rather
+        than punch a hole in that gate (which exists to keep the campaign's
+        choices in daylight where the player can think), endless simply starts
+        with its loadout already decided.  Choosing skills is the campaign's
+        game; surviving with them is this one's.
+        """
+        for key in C.ENDLESS_DEFAULT_SKILLS:
+            spec = SPELLS.get(key)
+            if spec is None:
+                continue
+            if key not in state.meta.skills:
+                state.meta.skills.append(key)
+            slot = 0 if spec.tier == 1 else 1
+            if slot < len(state.meta.slots) and state.meta.slots[slot] is None:
+                state.meta.slots[slot] = key
+        # The points were never spendable here; showing them was the bug.
+        state.meta.skill_points_1 = 0
+        state.meta.skill_points_2 = 0
 
     # ── the curve ────────────────────────────────────────────────────
     @staticmethod
