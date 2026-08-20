@@ -155,6 +155,11 @@ CHANNEL_LIGHT_RADIUS: Final = 58.0
 
 #: How hard 聖癒's shield throws off whatever walks into it.
 WARD_PUSH: Final = 150.0
+
+#: 一般擊退的速度，跟原本寫死在 _apply_knockback 裡的一樣。
+KNOCK_SPEED: Final = 150.0
+#: 疾風把人捲飛的速度。460 像素用 150 要飄三秒，讀起來像卡住。
+TORNADO_SPEED: Final = 620.0
 #: Damage multiplier while a boss is in that open state.
 EXPOSED_MULTIPLIER: Final = 2.0
 

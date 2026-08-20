@@ -98,11 +98,20 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         key="splitter", name="分裂怪",
         hp=3, speed=34.0, radius=12.0, sugar=2,
         traits=("splits",),
-        params={"split_into": "child", "split_count": 2},
+        params={"split_into": "splitterling", "split_count": 2},
         colour=(176, 64, 88), silhouette="villager",
         step_hz=380.0),
 
     # ── 5｜挖洞怪 ───────────────────────────────────────────────────
+    # 分裂怪裂出來的那一半：同一種東西，小一號、快一點、只有一滴血。
+    # 原本裂出來的是「孩子」—— 一個外型完全不同的物種，所以「它裂開了」在
+    # 畫面上讀起來像「它變成別的東西了」。
+    "splitterling": MonsterSpec(
+        key="splitterling", name="小分裂怪",
+        hp=1, speed=44.0, radius=8.0, sugar=1,
+        colour=(176, 64, 88), silhouette="villager",
+        step_hz=440.0),
+
     "digger": MonsterSpec(
         key="digger", name="挖洞怪",
         hp=3, speed=40.0, radius=11.0, sugar=2,

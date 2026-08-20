@@ -147,6 +147,9 @@ class Monster:
     hit_flash: float = 0.0
     #: Distance still to travel while being knocked back.
     knockback: float = 0.0
+    #: 這次擊退的速度（像素／秒）。提燈的推撞跟旋風的捲飛距離差三倍，用同一
+    #: 個速度的話後者會變成飄三秒的慢動作，看起來像卡住而不是被扔出去。
+    knock_speed: float = 150.0
     #: Which way that knockback goes, as a unit vector.
     #:
     #: Stored per hit rather than derived from Gretel's position.  Deriving it
@@ -293,6 +296,11 @@ class Puddle:
     burn: float = 0.0
     #: Seconds before it dries out; negative means it never does.
     life: float = -1.0
+    #: True for ground the player put down himself.  Mud and fire are supposed
+    #: to be in his way; his own lightning scorch is not — 閃電 dropped it at
+    #: his feet, so casting the panic button left him at four tenths speed for
+    #: three and a half seconds in the exact moment he needed to move.
+    spares_player: bool = False
 
 
 @dataclass(slots=True)

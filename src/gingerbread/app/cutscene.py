@@ -74,6 +74,8 @@ class CutsceneScene(Scene):
     照舊），另外補一個 Esc 跳過 —— 攤位上後面排隊的人不會想看第四次。
     """
 
+    wants_escape = True
+
     def __init__(self, app_state, key: str) -> None:
         self.g = app_state
         self.key = key

@@ -198,6 +198,8 @@ def _move_player(state: State, inputs: set[str], dt: float) -> None:
     recover = C.SWING_SLOWDOWN if p.swing_anim > 0 else 1.0
     drag = 1.0
     for pool in state.puddles:
+        if pool.spares_player:
+            continue
         if g.distance(p.x, p.y, pool.x, pool.y) <= pool.radius:
             drag = min(drag, pool.slow)
     rush = 1.0
@@ -508,11 +510,6 @@ def _advance_monsters(state: State, dt: float) -> None:
             monster.wake -= dt
             if monster.wake <= 0:
                 state.effects.append(Effect("wake", monster.x, monster.y, 0.4, 0.4))
-                fire_traits("spawn", spec.traits, state, monster)
-            survivors.append(monster)
-            continue
-
-        if monster.stunned > 0:
             survivors.append(monster)
             continue
 
@@ -521,15 +518,31 @@ def _advance_monsters(state: State, dt: float) -> None:
         monster.frozen = False
         fire_traits("tick", spec.traits, state, monster)
 
+        # Knockback outranks the stun.  Being thrown is not an action the
+        # monster takes, so a stun should not cancel it — and ordered the other
+        # way round it did: the stun check returned first, the body froze where
+        # it stood, and the push it had just been handed was silently dropped
+        # on the next frame.  Every skill that stunned *and* shoved therefore
+        # only stunned, which is why 疾風 read as doing nothing at all.
         if monster.knockback > 0:
             _apply_knockback(state, monster, dt)
+        elif monster.stunned > 0:
+            survivors.append(monster)
+            continue
         elif not monster.frozen:
             run_behaviour(spec.behaviour, state, monster, dt)
 
         if _touch_player(state, monster, spec):
             pass                      # contact resolved; the monster survives
 
-        if g.distance(monster.x, monster.y, C.SISTER_X, C.SISTER_Y) < C.SISTER_REACH:
+        # 正在被擊退的身體不算「走到葛蕾特身上」。
+        #
+        # 它不是走過去的，是被扔過去的 —— 而扔它的人就是為了讓它離開才扔的。
+        # 沒有這一條，任何把怪物推過場地中央的技能都會在半路上替玩家扣掉葛蕾
+        # 特的血，於是「清場」這個動作本身變成一種風險，玩家學到的是不要用。
+        if (monster.knockback <= 0
+                and g.distance(monster.x, monster.y,
+                               C.SISTER_X, C.SISTER_Y) < C.SISTER_REACH):
             _reach_sister(state, monster, spec)
             continue
 
@@ -550,7 +563,7 @@ def _apply_knockback(state: State, monster: Monster, dt: float) -> None:
         # No recorded direction (an older save, or a push with no attacker):
         # fall back to straight back from Gretel.
         dx, dy = g.normalise(monster.x - C.SISTER_X, monster.y - C.SISTER_Y)
-    travel = min(monster.knockback, 150.0 * dt)
+    travel = min(monster.knockback, max(60.0, monster.knock_speed) * dt)
     radius = spec_of(monster).radius
     monster.x, monster.y = g.slide(
         state.obstacles, monster.x, monster.y,
@@ -568,6 +581,7 @@ def _push(monster: Monster, from_x: float, from_y: float,
         dx, dy = g.normalise(monster.x - C.SISTER_X, monster.y - C.SISTER_Y)
     monster.knock_x, monster.knock_y = dx, dy
     monster.knockback = max(monster.knockback, distance)
+    monster.knock_speed = C.KNOCK_SPEED
 
 
 def _touch_player(state: State, monster: Monster, spec) -> bool:
@@ -579,29 +593,51 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
                            p.x, p.y, C.PLAYER_RADIUS):
         return False
 
-    # 疾風 — he is the hazard now.  Checked before the guard because running
-    # someone down is an attack, and an attack that lost to a defensive state
-    # would make the two skills cancel each other for no reason a player could
-    # guess.
+    # 疾風 — 漢賽爾本人變成一道旋風。
+    #
+    # 撞上去的東西會被**往他前進的方向**捲走，一路捲到場地邊上。方向取自他的
+    # 移動方向而不是幾何上的推離，因為旋風就是這樣運作的 —— 玩家轉向哪裡，
+    # 被捲的人就飛去哪裡，這是一條看一眼就懂的規則。
+    #
+    # 一開始的版本是從漢賽爾身上往外推，而他大半時間站在葛蕾特和怪物之間，
+    # 所以「衝過去撞開它」的結果是把它撞到她身上。第二版改成一律推離葛蕾特，
+    # 方向是安全了，但手感很怪：怪物會沿著一條跟玩家動作無關的線飛走。
+    #
+    # 真正該修的不是方向，是那條「被扔出去的身體照樣能傷到葛蕾特」的規則 ——
+    # 見 _advance_monsters 裡的擊退判斷。修掉之後方向就自由了。
     if p.haste > 0:
         spec = SPELL_TABLE.get("windrun")
-        push = float(spec.params.get("push", 120.0)) if spec else 120.0
-        _push(monster, p.x, p.y, push)
-        damage_target(state, monster,
-                      int(spec.params.get("boss", 5)) if spec and monster in
-                      state.bosses else 999,
-                      from_x=p.x, from_y=p.y)
-        state.effects.append(Effect("gale", monster.x, monster.y, 0.3, 0.3))
+        push = float(spec.params.get("push", 460.0)) if spec else 460.0
+        dx, dy = g.normalise(p.face_x, p.face_y)
+        if dx == 0.0 and dy == 0.0:
+            dx, dy = g.normalise(monster.x - p.x, monster.y - p.y)
+        if dx == 0.0 and dy == 0.0:
+            dx, dy = 1.0, 0.0
+        monster.knock_x, monster.knock_y = dx, dy
+        monster.knockback = max(monster.knockback, push)
+        monster.knock_speed = C.TORNADO_SPEED
+        monster.stunned = max(monster.stunned, 0.5)
+        if monster in state.bosses:
+            damage_target(state, monster,
+                          int(spec.params.get("boss", 6)) if spec else 6,
+                          element="wind", from_x=p.x, from_y=p.y)
+        state.effects.append(Effect("gale", monster.x, monster.y, 0.35, 0.35))
+        state.emit("swept")
         return True
 
-    # 雷鳴 — the armour answers for him.  It costs the attacker a heart and a
-    # moment, and stores the hit for the discharge when the five seconds lapse.
+    # 雷鳴 — 碰到就死。
+    #
+    # 這才是「披上雷電護甲」該有的意思。原本一次只扣一滴血，對著三四滴血的
+    # 怪等於什麼都沒發生，玩家看到的是自己被圍住、身上閃著紫光、然後照樣被
+    # 推開。現在它是一堵會殺人的牆：站住不動就是這個技能的玩法。
     if p.aura > 0:
         p.aura_hits += 1.0
-        monster.stunned = max(monster.stunned, 0.45)
-        damage_target(state, monster, 1, element="thunder",
+        spec = SPELL_TABLE.get("thunderclap")
+        amount = (int(spec.params.get("boss", 18)) if spec and monster in
+                  state.bosses else 999)
+        damage_target(state, monster, amount, element="thunder",
                       from_x=p.x, from_y=p.y)
-        state.effects.append(Effect("spark", monster.x, monster.y, 0.25, 0.25))
+        state.effects.append(Effect("spark", monster.x, monster.y, 0.3, 0.3))
         state.emit("zapped")
         return True
 
@@ -757,7 +793,10 @@ def spawn_boss(state: State, key: str) -> None:
         Boss(spec=key, x=x, y=y, hp=spec.hp, speed=spec.speed,
              max_hp=spec.hp)
     )
-    state.feedback.bump(shake=20.0, freeze=0.5)
+    # 0.5 秒的頓幀讀起來不是「重擊感」，是遊戲當掉了。王每一夜都會出場，所以
+    # 每一夜都會卡一次 —— 而卡住的那半秒正好是玩家最需要看清楚它從哪裡進場
+    # 的半秒。留 0.12 秒：夠成為一個重音，短到不會被誤認成掉幀。
+    state.feedback.bump(shake=20.0, freeze=0.12)
     state.effects.append(Effect("boss_enter", x, y, 1.2, 1.2))
     state.emit(f"boss_enter:{key}")
 
@@ -993,7 +1032,8 @@ def _advance_puddles(state: State, dt: float) -> None:
             if pool.life <= 0:
                 continue
         alive.append(pool)
-        if pool.burn > 0 and g.distance(p.x, p.y, pool.x, pool.y) <= pool.radius:
+        if (pool.burn > 0 and not pool.spares_player
+                and g.distance(p.x, p.y, pool.x, pool.y) <= pool.radius):
             burning = True
     state.puddles = alive
 
@@ -1210,6 +1250,16 @@ def make_monster(state: State, key: str, x: float, y: float, *,
                       wake=wake, elite=elite)
     escalate_speed(monster, state.elapsed)
     state.stats.arrivals += 1
+    # 出生就跑 spawn 特性 —— 那個掛勾的定義就是「它進入世界的那一刻」。
+    #
+    # 這一行原本不在。spawn 特性只在 _advance_monsters 裡、wake 倒數歸零的
+    # 那一幀才觸發，而 make_monster 的 wake 預設是 0.0 —— 也就是說從警告圈
+    # 生出來的怪一律不滿足 `wake > 0`，那個分支永遠不會進去。
+    #
+    # 後果：盔甲怪從來沒有穿過盔甲。它的血量、速度、圖示、圖鑑條目全都對，
+    # 唯獨那 3 點護甲永遠是 0。設計文件裡「要打兩下才破甲」的那隻怪，實際
+    # 上跟村民一樣脆。
+    fire_traits("spawn", spec.traits, state, monster)
     if elite:
         fire_traits("spawn", ("elite_aura",), state, monster)
     return monster

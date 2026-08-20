@@ -409,6 +409,11 @@ class Scene:
     """Draw and handle input in one pass.  ``opaque = False`` makes an overlay."""
 
     opaque = True
+    #: True for scenes that use Escape themselves.  The shell opens the pause
+    #: menu on Escape before the stack ever sees the key, so a scene that wants
+    #: to mean something else by it has to say so — otherwise the on-screen
+    #: hint says "Esc 跳過" and pressing Esc opens a menu instead.
+    wants_escape = False
 
     def enter(self, app: "SceneStack") -> None: ...
     def exit(self, app: "SceneStack") -> None: ...

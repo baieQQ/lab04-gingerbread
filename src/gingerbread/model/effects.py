@@ -114,7 +114,8 @@ def smite(state: State, spec) -> None:
         radius=float(spec.params.get("slow_radius", 66.0)),
         kind="shock",
         slow=float(spec.params.get("slow", 0.4)),
-        life=float(spec.params.get("slow_life", 3.5))))
+        life=float(spec.params.get("slow_life", 3.5)),
+        spares_player=True))
 
     state.effects.append(Effect("bolt", p.x, p.y, 0.35, 0.35, radius))
     state.feedback.bump(shake=10.0, freeze=0.07)

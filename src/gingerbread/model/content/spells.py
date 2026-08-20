@@ -35,7 +35,10 @@ SPELLS: Final[dict[str, SpellSpec]] = {
                     "落點會留下一片電焦的地面，走進去的都變慢",
         cost=1, cooldown=16.0, duration=0.0,
         effect="smite",
-        params={"radius": 54.0, "damage": 2.0, "push": 165.0,
+        # 傷害 2 的時候，範圍內大部分的怪（3-5 滴血）被震開之後照樣活著，
+        # 玩家看到的是「怪飛走了，沒人死」—— 那讀起來就是沒有傷害。3 讓輕的
+        # 那一群當場清空，硬的那幾種還是要補第二下，跟提燈同一條規則。
+        params={"radius": 54.0, "damage": 3.0, "push": 165.0,
                 "boss": 5.0, "slow": 0.4, "slow_life": 3.5,
                 "slow_radius": 66.0},
         colour=(180, 140, 255)),
@@ -67,7 +70,8 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     # ── 二階 · 兩點技能點 ───────────────────────────────────────────
     "thunderclap": SpellSpec(
         key="thunderclap", name="雷鳴", element="thunder", tier=2,
-        description="披上雷電護甲五秒，碰到你的人被電；結束時把累積的電放掉",
+        description="披上雷電護甲五秒，碰到你的人當場被電死；"
+                    "結束時把累積的電一次放掉",
         cost=1, cooldown=26.0, duration=5.0,
         effect="storm_armour", needs_target=False,
         params={"radius": 50.0, "burst_radius": 80.0, "boss": 18.0},
@@ -84,10 +88,11 @@ SPELLS: Final[dict[str, SpellSpec]] = {
 
     "windrun": SpellSpec(
         key="windrun", name="疾風", element="wind", tier=2,
-        description="六秒內高速移動，撞到誰就把誰撞飛",
+        description="六秒內化成旋風，撞到的敵人會被捲著往你衝的方向飛到場邊；"
+                    "期間照樣可以揮燈",
         cost=1, cooldown=24.0, duration=6.0,
         effect="gale", needs_target=False,
-        params={"speed": 2.4, "push": 120.0, "boss": 6.0},
+        params={"speed": 2.4, "push": 460.0, "boss": 6.0},
         colour=(178, 232, 218)),
 
     "riptide": SpellSpec(

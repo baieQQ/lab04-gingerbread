@@ -379,7 +379,15 @@ class Game:
                         # Escape opens the pause menu rather than quitting.
                         # Quitting on the key that every player presses to see
                         # their options is a way to lose a run by accident.
-                        self._toggle_pause()
+                        #
+                        # 除非最上面那個場景自己要用 Esc。過場動畫的畫面上就
+                        # 寫著「Esc 跳過」，而這裡搶先開了暫停選單 —— 玩家照
+                        # 著畫面上的字按，得到的是另一件事。
+                        top = self.stack.top
+                        if getattr(top, "wants_escape", False):
+                            pass          # 交給場景自己處理
+                        else:
+                            self._toggle_pause()
 
             self._clear_bars()
             self.stack.frame(dt, events)
