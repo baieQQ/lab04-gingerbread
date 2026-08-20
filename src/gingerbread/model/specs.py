@@ -137,9 +137,20 @@ class BossSpec:
     #: no way to buy space, which reads as unfair rather than hard.
     knockable: bool = True
     contact_damage: int = 2
-    #: Fraction of normal damage a spell deals.  Without this, stockpiling two
-    #: lightning bolts skips every boss the game has.
-    spell_resistance: float = 0.15
+    #: 一次非提燈的傷害，最多能削掉這隻王滿血的幾成。
+    #:
+    #: 這個欄位以前叫 spell_resistance，宣告在這裡、附著一行「沒有它的話，屯
+    #: 兩發閃電就能跳過遊戲裡的每一隻王」的說明 —— 然後**沒有任何一行程式讀
+    #: 它**。結果那句話字面成真：量出來水牢一發打掉灰燼灶鬼 78%、疾風貼著迷
+    #: 霧死神磨掉 93%，而克制關係越做越深，這個數字只會越來越大。
+    #:
+    #: 上限而不是折扣：技能對王的傷害本來就一個一個調過（見 spells.py 的
+    #: ``boss`` 參數），乘一個係數會把那些調過的數字全部作廢。上限只砍掉那些
+    #: 「元素克制 × 破綻視窗」疊出來的極端值，其餘照舊。
+    #:
+    #: 提燈不受限。破綻視窗把傷害翻倍這件事，本來就是要讓**提燈**收成的 ——
+    #: 技能負責開窗，戰鬥還是要打。
+    spell_cap: float = 0.12
 
     #: The element that answers this fight.  Every boss has one, and the phase
     #: announcements are what teach it — a weakness the player cannot discover

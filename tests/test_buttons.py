@@ -21,9 +21,10 @@ import pygame                                        # noqa: E402
 
 from gingerbread import model as m                   # noqa: E402
 from gingerbread.app.game import Game                # noqa: E402
-from gingerbread.app.scenes import (CodexScene, DawnScene,  # noqa: E402
-                                    MapScene, PauseScene, PlayScene,
-                                    ResultScene)
+from gingerbread.app.scenes import (CodexScene, CreditsScene,  # noqa: E402
+                                    DawnScene, LedgerScene, MapScene,
+                                    PauseScene, PlayScene, ProfileScene,
+                                    ResultScene, build_menu)
 
 
 def _click(game, pos):
@@ -54,6 +55,11 @@ def _sweep(game, step=26):
 
 def _fresh(scene_factory=None, **meta):
     game = Game(seed=1, fullscreen=False)
+    # 開機第一個畫面是「誰在玩」。先給它一個名字再走到主選單，不然掃到的是
+    # 存檔畫面而不是要測的那一頁。
+    game.session.load_profile("測試")
+    game.stack.pop()
+    game.stack.push(build_menu(game.session))
     game.session.set_onboarding(False)
     for key, value in meta.items():
         setattr(game.session.state.meta, key, value)
@@ -70,10 +76,35 @@ def test_main_menu_buttons_are_all_clickable():
     _sweep(game)
 
 
+def test_the_profile_screen_survives_every_button():
+    """存檔畫面：選存檔、開娛樂開關、刪除、建立新的，全部點過一遍。
+
+    這一頁比別頁危險 —— 它的按鈕會刪東西、會重建整局。而網格掃描會**真的**
+    按下「真的刪」，所以 conftest 把存檔路徑換到暫存資料夾這件事，是這支測試
+    能存在的前提。
+    """
+    game = Game(seed=1, fullscreen=False)
+    game.session.load_profile("甲")
+    game.session.load_profile("乙")
+    game.stack.pop()
+    game.stack.push(ProfileScene(game.session, first=True))
+    for _ in range(4):
+        game.stack.frame(1 / 60.0, [])
+    _sweep(game)
+
+
+def test_the_credits_screen_survives_every_button():
+    game = _fresh()
+    game.stack.push(CreditsScene(game.session))
+    _sweep(game)
+
+
 @pytest.mark.parametrize("factory", [
     lambda g: CodexScene(g.session),
     lambda g: MapScene(g.session),
     lambda g: PauseScene(g.session, g),
+    lambda g: LedgerScene(g.session, victory=True),
+    lambda g: ProfileScene(g.session),
 ])
 def test_overlay_scene_buttons(factory):
     game = _fresh()

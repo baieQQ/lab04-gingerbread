@@ -183,13 +183,16 @@ def twister(state: State, spec) -> None:
     hold = float(spec.params.get("hold", 2.5))
     spread = float(spec.params.get("spread", 0.38))
     heading = math.atan2(dy, dx)
+    # 三道風共用同一份對王的額度，從這一刻開始算。
+    for boss in state.bosses:
+        boss.memory["whirled_hits"] = 0.0
     for offset in (-spread, 0.0, spread):
         angle = heading + offset
         state.hazards.append(Hazard(
             kind="twister", x=p.x, y=p.y, radius=radius,
             life=float(spec.duration),
             vx=math.cos(angle) * speed, vy=math.sin(angle) * speed,
-            hold=hold))
+            hold=hold, strength=float(spec.params.get("boss", 5.0))))
     state.effects.append(Effect("twister", p.x, p.y, 0.4, 0.4, int(radius)))
     state.feedback.bump(shake=4.0)
     _expose_matching(state, spec)
@@ -231,6 +234,8 @@ def storm_armour(state: State, spec) -> None:
     p = state.player
     p.aura = float(spec.duration)
     p.aura_hits = 0.0
+    for boss in state.bosses:
+        boss.memory["zapped_hits"] = 0.0
     state.effects.append(Effect("aura", p.x, p.y, 0.5, 0.5,
                                 float(spec.params.get("radius", 50.0))))
     state.feedback.bump(shake=5.0)
@@ -274,6 +279,8 @@ def gale(state: State, spec) -> None:
     long as the player keeps steering into people.
     """
     state.player.haste = float(spec.duration)
+    for boss in state.bosses:
+        boss.memory["swept_hits"] = 0.0
     state.effects.append(Effect("gale", state.player.x, state.player.y, 0.4, 0.4))
     state.feedback.bump(shake=4.0)
     _expose_matching(state, spec)
@@ -302,10 +309,11 @@ def surge_wave(state: State, spec) -> None:
             kind="wave", x=p.x, y=p.y,
             # 三圈的大小拉開：0.40 / 0.70 / 1.00，不是擠在 0.45～1.00 之間。
             radius=reach * (0.40 + 0.30 * i),
+            # 只有最外圈帶對王的傷害。三圈各算一次的話，一次怒潮就是三下。
             # 出發時間也拉開。原本間隔 0.20 秒，三圈幾乎同時掃過同一個位置，
             # 看起來像一個閃三下的圓而不是三道浪。
             life=0.38 + i * gap,
-            hold=push, charges=boss))
+            hold=push, charges=boss if i == 2 else 0))
         state.hazards[-1].hold_life = state.hazards[-1].life
     state.mist_ticks = max(state.mist_ticks,
                            int(round(float(spec.params.get("mist", 5.0))

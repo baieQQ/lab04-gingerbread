@@ -63,7 +63,7 @@ SPELLS: Final[dict[str, SpellSpec]] = {
         cost=1, cooldown=16.0, duration=5.0,
         effect="twister",
         params={"speed": 150.0, "radius": 52.0, "hold": 2.5,
-                "spread": 0.38},
+                "spread": 0.38, "boss": 5.0},
         colour=(150, 214, 200)),
 
     "cage": SpellSpec(

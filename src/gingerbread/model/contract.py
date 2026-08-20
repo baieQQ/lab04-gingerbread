@@ -205,6 +205,7 @@ def snapshot(state: State) -> dict[str, object]:
         "event_ticks": state.event_ticks,
         "godmode": state.meta.godmode,
         "seeall": state.meta.seeall,
+        "freecast": state.meta.freecast,
         "light_scale": repr(round(state.light_scale, 9)),
         "fog_scale": repr(round(state.fog_scale, 9)),
         "reveal_ticks": state.reveal_ticks,
@@ -277,7 +278,8 @@ def parse_action(action: str) -> tuple[str, object]:
     nothing and raises immediately rather than after a deep copy.
     """
     if action in ("tick", "swing", "begin_night", "next_night", "retry",
-                  "whet", "oil", "godmode", "seeall", "skipnight"):
+                  "whet", "oil", "godmode", "seeall", "freecast",
+                  "skipnight"):
         return (action, None)
 
     if action.startswith("move:"):
@@ -425,6 +427,15 @@ def apply_action(state: State, action: str) -> State:
         # 開圖。跟 godmode 一樣走 model，所以 HUD 和快照都知道它開著。
         nxt.meta.seeall = not nxt.meta.seeall
         nxt.emit("seeall:on" if nxt.meta.seeall else "seeall:off")
+        return nxt
+
+    if verb == "freecast":
+        # 娛樂模式：技能不用等。已經在等的那幾個也一起放掉，否則開關打開之後
+        # 還要先把剩下的冷卻等完，看起來像是沒生效。
+        nxt.meta.freecast = not nxt.meta.freecast
+        if nxt.meta.freecast:
+            nxt.cooldowns = {k: 0 for k in nxt.cooldowns}
+        nxt.emit("freecast:on" if nxt.meta.freecast else "freecast:off")
         return nxt
 
     raise ActionError(f"unhandled verb {verb!r}")     # pragma: no cover

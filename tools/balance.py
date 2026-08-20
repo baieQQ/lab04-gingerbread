@@ -93,8 +93,11 @@ def skilled(state):
     if not live:
         return "tick"
     if len(live) >= 6:
-        for key in ("bolt", "tornado"):
-            if state.meta.spells.get(key, 0) > 0:
+        # meta.spells 這個欄位在某次重構之後就不存在了，而這一行從此每一次
+        # 都會拋 AttributeError —— 也就是「高手機器人」的那一列數字，已經很久
+        # 沒有量到任何東西。
+        for key in state.meta.slots:
+            if key and state.cooldowns.get(key, 0) <= 0:
                 return f"cast:{key}"
     action = careful(state)
     target = min(live, key=lambda x: (
@@ -140,6 +143,32 @@ def spend_in_shop(state):
     return state
 
 
+def prepare_day(state):
+    """學技能、把上場的兩個位子塞滿。
+
+    **沒有這一步，白天永遠不會結束。** 天黑那顆按鈕要兩個位子都有技能才按得
+    下去，而這支工具原本只是一直送 tick —— 所以整個 campaign 量測會停在第一
+    個白天，永遠跑不完。（那也是一個好消息：真人玩家不可能卡在這裡，因為第一
+    天就有一點技能點可以花。）
+    """
+    from gingerbread.model.content import SPELLS
+
+    for tier, keys in ((1, ("bolt", "holy", "tornado", "cage")),
+                       (2, ("thunderclap", "windrun", "riptide", "blessing"))):
+        for key in keys:
+            if key in state.meta.skills or state.meta.points_for(tier) <= 0:
+                continue
+            state = m.apply_action(state, f"learn:{key}")
+    for index, tier in ((0, 1), (1, 2)):
+        if state.meta.slots[index]:
+            continue
+        for key in state.meta.skills:
+            if SPELLS[key].tier == tier:
+                state = m.apply_action(state, f"slot:{index}:{key}")
+                break
+    return state
+
+
 # ── runs ─────────────────────────────────────────────────────────────
 def run_endless(seed, bot, cap=400_000):
     state = m.new_game(seed=seed, mode=m.Mode.ENDLESS)
@@ -162,11 +191,11 @@ def run_campaign(seed, bot, cap=20_000):
     for _ in range(C.CAMPAIGN_NIGHTS):
         for action in ("whet", "oil", "whet", "oil"):
             state = m.apply_action(state, action)
-        # Spending the last action point does not itself advance time; the
-        # model turns the day over on the next tick.  Without this the harness
-        # measured a "night 1 loss" that was really the day never ending.
-        while state.phase is m.Phase.DAY:
-            state = m.apply_action(state, "tick")
+        state = prepare_day(state)
+        if any(slot is None for slot in state.meta.slots):
+            print(f"    (seed {seed} 第 {state.meta.night} 夜湊不滿兩個技能，停在白天)")
+            break
+        state = m.apply_action(state, "begin_night")
         steps = 0
         while state.phase is m.Phase.NIGHT and steps < cap:
             state = m.apply_action(state, bot(state))

@@ -391,6 +391,14 @@ def damage_target(state: State, target: Monster, amount: int, *,
     if target.memory.get("exposed", 0.0) > 0:
         amount = int(round(amount * C.EXPOSED_MULTIPLIER))
 
+    # ── 王的上限：一次技能不准把一場戰鬥刪掉 ─────────────────────
+    #
+    # 放在克制與破綻視窗**之後**，因為要砍的正是那兩個乘起來的結果。放在護甲
+    # 之前，因為護甲本來就該先吃。
+    if not by_lantern and isinstance(target, Boss):
+        share = float(getattr(spec, "spell_cap", 0.12))
+        amount = min(amount, max(1, int(round(target.max_hp * share))))
+
     # ── armour soaks before health does ──────────────────────────────
     if target.armour > 0:
         soaked = min(target.armour, amount)
@@ -650,6 +658,23 @@ def _contact_ready(target: Monster, tag: str) -> bool:
     return True
 
 
+def _boss_budget(target: Monster, tag: str, cap: int) -> bool:
+    """這一次施法還打得動這隻王嗎？打得動就記一次。
+
+    節流閥（``_contact_ready``）管的是「每秒最多幾下」，這個管的是「一次施法
+    總共幾下」。兩個都需要：只有節流閥的話，疾風六秒仍然磨得掉 93% 的血 ——
+    貼著王來回蹭這件事，不該是這款遊戲對王的正解。
+
+    計數器記在王身上、由施法的那一刻清零，所以它天然跟著「一次施法」走，不
+    需要在玩家身上再開一個欄位。
+    """
+    spent = target.memory.get(tag, 0.0)
+    if spent >= cap:
+        return False
+    target.memory[tag] = spent + 1.0
+    return True
+
+
 def _touch_player(state: State, monster: Monster, spec) -> bool:
     """Resolve a monster bumping into Hansel.  Returns True when it happened."""
     p = state.player
@@ -687,7 +712,8 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
         monster.knockback = max(monster.knockback, push)
         monster.knock_speed = C.TORNADO_SPEED
         monster.stunned = max(monster.stunned, 0.5)
-        if monster in state.bosses and _contact_ready(monster, "swept"):
+        if (monster in state.bosses and _contact_ready(monster, "swept")
+                and _boss_budget(monster, "swept_hits", C.GALE_BOSS_HITS)):
             damage_target(state, monster,
                           int(spec.params.get("boss", 6)) if spec else 6,
                           element="wind", from_x=p.x, from_y=p.y)
@@ -701,8 +727,10 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
     # 怪等於什麼都沒發生，玩家看到的是自己被圍住、身上閃著紫光、然後照樣被
     # 推開。現在它是一堵會殺人的牆：站住不動就是這個技能的玩法。
     if p.aura > 0:
-        if monster in state.bosses and not _contact_ready(monster, "zapped"):
-            return True               # 還在冷卻，接觸算數但不再扣血
+        if monster in state.bosses and not (
+                _contact_ready(monster, "zapped")
+                and _boss_budget(monster, "zapped_hits", C.AURA_BOSS_HITS)):
+            return True               # 冷卻中或這一次施法的份額用完了
         p.aura_hits += 1.0
         spec = SPELL_TABLE.get("thunderclap")
         amount = (int(spec.params.get("boss", 18)) if spec and monster in
@@ -1059,9 +1087,18 @@ def _advance_hazards(state: State, dt: float) -> None:
         # A boss is too heavy to lift.  It still feels the wind — the element's
         # window opens — but a skill that could park a boss at the map edge for
         # five seconds would be the only skill anyone ever brought.
+        #
+        # 捲不動，但打得到。原本連傷害都沒有，所以龍捲風對六隻王的血條全部是
+        # 零 —— 一個傷害技能對王完全沒有傷害，玩家讀不出那是設計。三道風共用
+        # 同一份額度，所以一次施法就是一下。
         for boss in state.bosses:
-            if g.distance(boss.x, boss.y, hazard.x, hazard.y) <= hazard.radius:
-                boss.stunned = max(boss.stunned, min(0.4, hazard.hold))
+            if g.distance(boss.x, boss.y, hazard.x, hazard.y) > hazard.radius:
+                continue
+            boss.stunned = max(boss.stunned, min(0.4, hazard.hold))
+            if (hazard.kind == "twister" and hazard.strength > 0
+                    and _boss_budget(boss, "whirled_hits", 1)):
+                damage_target(state, boss, int(hazard.strength),
+                              element="wind", from_x=hazard.x, from_y=hazard.y)
 
         if hazard.charges == 0:
             state.effects.append(Effect("trap_spring", hazard.x, hazard.y,
@@ -1087,6 +1124,20 @@ def _advance_wave(state: State, hazard: Hazard) -> None:
     hazard.reach = hazard.radius * (0.25 + 0.75 * span)
     _kill_within(state, hazard.x, hazard.y, hazard.reach, "water",
                  push=hazard.hold, boss=0)
+
+    # 王另外算。水波每一格都在判定，把 charges 直接餵給 _kill_within 等於一
+    # 秒扣六十次 —— 所以原本寫死 boss=0，而那讓怒潮對王完全沒有傷害（三圈水
+    # 波打在王身上，血條一格都不動）。
+    #
+    # 一次施法只有最外圈帶傷害（見 surge_wave），而且同一圈只算一次。
+    if hazard.charges > 0 and not hazard.sprung:
+        for boss in state.bosses:
+            if g.distance(boss.x, boss.y, hazard.x, hazard.y) > hazard.reach:
+                continue
+            hazard.sprung = True
+            damage_target(state, boss, int(hazard.charges), element="water",
+                          from_x=hazard.x, from_y=hazard.y)
+            break
 
 
 def _meteor_lands(state: State, hazard: Hazard) -> None:
@@ -1288,6 +1339,11 @@ def cast(state: State, key: str) -> None:
 
 def _spend_cooldown(state: State, key: str, spec) -> None:
     """Put a skill on cooldown, after the 技能冷卻 upgrade has had its say."""
+    if state.meta.freecast:
+        # 娛樂存檔。設成 0 而不是不寫進去，因為 HUD 是照著 cooldowns 這張表
+        # 畫冷卻圈的 —— 少了那一筆，圈圈會用上一次的值卡在那裡。
+        state.cooldowns[key] = 0
+        return
     scale = derive(state).cooldown_scale
     state.cooldowns[key] = max(1, int(round(spec.cooldown * scale / C.FIXED_DT)))
 

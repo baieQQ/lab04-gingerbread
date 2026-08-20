@@ -29,7 +29,8 @@ from ..view.audio import Audio
 from ..view.board import Board
 from ..view.fonts import FontBook
 from ..view.ui import SceneStack, UI
-from .scenes import HUD_H, RAIL_H, build_menu
+from .scenes import (FUN_MODES, HUD_H, NAME_LIMIT, RAIL_H,
+                     ProfileScene, build_menu)
 
 #: The game is laid out at this fixed size and then scaled to whatever the
 #: display is.  Every screen keeps its hand-placed coordinates, and the text
@@ -53,8 +54,15 @@ SAVE_PATH = Path.home() / ".gingerbread_save.json"
 #: 會有別人放的東西。一個 JSON 由這支程式全權負責，讀壞了就當作沒有存檔。
 PROFILES_PATH = Path.home() / ".gingerbread_profiles.json"
 
-#: 暱稱最長幾個字。長到會撐破選單的名字，是選單的問題不是玩家的問題。
-NAME_LIMIT = 10
+
+def _merge_max(saved: list, run: list) -> list:
+    """逐格取大值，長度取長的那一邊。"""
+    out = list(saved)
+    while len(out) < len(run):
+        out.append(0)
+    for i, value in enumerate(run):
+        out[i] = max(out[i], int(value))
+    return out
 
 
 class Session:
@@ -86,6 +94,10 @@ class Session:
         self.story_shown = 0
         #: 目前的存檔名稱；空字串代表還沒選（走舊的單一存檔）。
         self.profile = ""
+        #: 三個娛樂開關，見 ``scenes.FUN_MODES``。跟著存檔走而不是跟著一局走
+        #: —— 「特殊存檔才有的狀況」是玩家選存檔時就決定好的事，不是打到一半
+        #: 開的外掛。
+        self.fun = {key: False for key, _name, _note in FUN_MODES}
         #: 已經播過的夜晚過場，避免重打同一夜時又看一次三分鐘的動畫。
         self.cutscenes_played: set[str] = set()
         #: Events heard since the shell last drained them.  ``apply_action``
@@ -103,7 +115,16 @@ class Session:
         carried = m.Meta(mode=mode,
                          best_night=self.saved.best_night,
                          best_endless_ticks=self.saved.best_endless_ticks,
-                         best_endless_kills=self.saved.best_endless_kills)
+                         best_endless_kills=self.saved.best_endless_kills,
+                         # 難度以前掉在這裡：選了簡單再按七夜，開出來的是一
+                         # 般。難度是存檔的屬性，新的一局要帶著它走。
+                         difficulty=self.saved.difficulty)
+        # 星等與次數是「整輪」的紀錄，不是「這一局」的 —— 帶進去讓它繼續累
+        # 積，成績單上第三夜打了七次才是七次，不是重開之後又變成一次。
+        carried.night_stars = list(self.saved.night_stars)
+        carried.night_tries = list(self.saved.night_tries)
+        for key, on in self.fun.items():
+            setattr(carried, key, on)
         self.state = m.new_game(seed=self.seed, meta=carried, mode=mode)
         self.accumulator = 0.0
         self.story_shown = 0
@@ -261,6 +282,14 @@ class Session:
                                             meta.best_endless_ticks)
         self.saved.best_endless_kills = max(self.saved.best_endless_kills,
                                             meta.best_endless_kills)
+        # 星等與挑戰次數以前只活在這一局的 meta 裡，從來沒有回到存檔 ——
+        # 七夜地圖上的星星和成績單讀的都是 self.saved，所以兩邊永遠是零。
+        # 逐格取大值而不是直接覆蓋：「從頭開始」會把這一局的紀錄清成零，那不
+        # 該把已經拿到的成績一起清掉。
+        self.saved.night_stars = _merge_max(self.saved.night_stars,
+                                            meta.night_stars)
+        self.saved.night_tries = _merge_max(self.saved.night_tries,
+                                            meta.night_tries)
         self._save()
 
     # ── 存檔（以暱稱為單位）────────────────────────────────────────
@@ -293,7 +322,29 @@ class Session:
             difficulty=str(row.get("difficulty", m.constants.DEFAULT_DIFFICULTY)),
         )
         self.saved.night_stars = stars
-        self.state.meta.difficulty = self.saved.difficulty
+        tries = [int(v) for v in row.get("night_tries", [])]
+        while len(tries) <= m.constants.CAMPAIGN_NIGHTS:
+            tries.append(0)
+        self.saved.night_tries = tries
+        fun = row.get("fun", {})
+        self.fun = {key: bool(fun.get(key, False))
+                    for key, _name, _note in FUN_MODES}
+        # 換存檔就換一局。留著上一個人打到一半的場地，等於把別人的進度接到
+        # 這個名字底下。
+        self.start(m.Mode.CAMPAIGN)
+        self.story_shown = 0
+        self.cutscenes_played.clear()
+        self._save_profile()
+
+    def set_fun(self, key: str, on: bool) -> None:
+        """開關一個娛樂模式，並且立刻套用到手上這一局。"""
+        if key not in self.fun:
+            return
+        self.fun[key] = bool(on)
+        if getattr(self.state.meta, key) != bool(on):
+            # 走 model 的動作而不是直接改欄位，這樣快照看得到，而且 freecast
+            # 打開的時候還在等的冷卻也會一起放掉。
+            self.state = m.apply_action(self.state, key)
         self._save_profile()
 
     def delete_profile(self, name: str) -> None:
@@ -310,7 +361,9 @@ class Session:
             "best_endless_ticks": self.saved.best_endless_ticks,
             "best_endless_kills": self.saved.best_endless_kills,
             "night_stars": list(self.saved.night_stars),
+            "night_tries": list(self.saved.night_tries),
             "difficulty": self.saved.difficulty,
+            "fun": dict(self.fun),
             "taught": sorted(self.taught),
             "onboarding": self.onboarding,
             # 排序用的時間戳。用 tick 計數而不是時鐘，因為 model 那邊禁止讀
@@ -380,7 +433,9 @@ class Game:
         self.ui.scale = self.scale
         self.ui.view_offset = self.origin
         self.stack = SceneStack(self.ui)
-        self.stack.push(build_menu(self.session))
+        # 第一個畫面是「誰在玩」，不是主選單。名字要先有，這一輪的教學進度、
+        # 星等和挑戰次數才有地方記。
+        self.stack.push(ProfileScene(self.session, first=True))
         self.running = True
 
     def _build_canvas(self) -> None:

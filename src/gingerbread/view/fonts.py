@@ -42,6 +42,16 @@ _CANDIDATES: Final = (
 #: will contain them.
 _PROBE: Final = "糖"
 
+#: 私用區的字碼。沒有任何一套真的字型會有這裡的字形，所以它畫出來的一定是
+#: .notdef —— 拿它當樣本，就能問「這個字這套字型有沒有」：畫出來跟它一模一
+#: 樣，就是沒有。
+#:
+#: 這件事沒有別的問法。``Font.metrics`` 對缺字回傳的是 .notdef 的度量（不是
+#: None），字型子集又刻意保留了 .notdef 的輪廓，所以量得到寬度不代表畫得出
+#: 字。玩家自己打的暱稱是唯一會踩到這件事的地方 —— 遊戲裡其他的字都在原始碼
+#: 裡，build_font 掃得到。
+_NOTDEF: Final = "\ue000"
+
 
 def _search_roots(explicit: str | None) -> list[str]:
     """Directories that might contain ``assets/``.
@@ -88,10 +98,18 @@ def _paints_ink(font: pygame.font.Font) -> bool:
     return False
 
 
-def load_font(size: int, root: str | None = None) -> pygame.font.Font:
-    """Return a font that can draw Traditional Chinese, or pygame's default."""
+def load_font(size: int, root: str | None = None, *,
+              prefer_system: bool = False) -> pygame.font.Font:
+    """Return a font that can draw Traditional Chinese, or pygame's default.
+
+    ``prefer_system`` 把捆在遊戲裡的子集排到最後。子集只收原始碼裡出現過的
+    字，對「遊戲自己的字」剛剛好，對「玩家打進來的字」則是幾乎一定缺 —— 存檔
+    暱稱要用的是這一條路。找不到系統字型（網頁版就沒有）才退回子集，所以最壞
+    的情況是暱稱只能用打得出來的那些字，不是整個壞掉。
+    """
+    order = (_CANDIDATES[1:] + _CANDIDATES[:1]) if prefer_system else _CANDIDATES
     for base in _search_roots(root):
-        for candidate in _CANDIDATES:
+        for candidate in order:
             path = candidate if os.path.isabs(candidate) else os.path.join(base, candidate)
             if not os.path.exists(path):
                 continue
@@ -121,7 +139,13 @@ class FontBook:
         "title": 22,
         "big": 26,
         "huge": 40,
+        # 玩家自己打的字（存檔暱稱）專用。見 SYSTEM_SIZES。
+        "name": 22,
+        "name_small": 14,
     }
+
+    #: 這幾個尺寸走系統字型而不是捆進來的子集 —— 見 ``load_font``。
+    SYSTEM_SIZES: Final = ("name", "name_small")
 
     #: Beyond this many cached surfaces the cache is cleared wholesale.  A
     #: strict LRU would be tidier, but text here is drawn from a small fixed
@@ -141,8 +165,11 @@ class FontBook:
         self._root = root
         self._pixels = {name: max(8, int(round(size * scale)))
                         for name, size in self.SIZES.items()}
-        self._fonts = {name: load_font(px, root)
+        self._fonts = {name: load_font(px, root,
+                                       prefer_system=name in self.SYSTEM_SIZES)
                        for name, px in self._pixels.items()}
+        #: (字, 尺寸) -> 這套字型畫不畫得出來。見 :meth:`can_render`。
+        self._known: dict[tuple[str, str], bool] = {}
         self._cache: dict[tuple[str, str, RGB], pygame.Surface] = {}
         #: Strings already reported as unrenderable, so one bad label logs once
         #: instead of sixty times a second.
@@ -160,7 +187,9 @@ class FontBook:
         算過的快取也要一起丟，否則已經存進去的空白會被一直拿出來用。
         """
         try:
-            self._fonts[size] = load_font(self._pixels[size], self._root)
+            self._fonts[size] = load_font(
+                self._pixels[size], self._root,
+                prefer_system=size in self.SYSTEM_SIZES)
         except Exception:                              # noqa: BLE001
             return
         self._cache = {k: v for k, v in self._cache.items() if k[1] != size}
@@ -250,6 +279,30 @@ class FontBook:
         """Return the pixel size this text would occupy."""
         return self._size(self._fonts[size], text)
 
+    def can_render(self, char: str, size: str = "name") -> bool:
+        """這套字型畫不畫得出 ``char``。
+
+        畫一次跟 .notdef 比對，比對完記起來。缺字在這個遊戲裡只有一個入口
+        —— 玩家自己打的暱稱 —— 而擋在輸入那一關，比讓它一路畫到畫面上再想
+        辦法補救乾淨得多：畫不出來的字根本不該被收進存檔的名字裡。
+        """
+        key = (char, size)
+        hit = self._known.get(key)
+        if hit is not None:
+            return hit
+        font = self._fonts[size]
+        try:
+            blank = font.render(_NOTDEF, True, (255, 255, 255))
+            drawn = font.render(char, True, (255, 255, 255))
+        except pygame.error:
+            self._revive(size)
+            return False
+        ok = (drawn.get_size() != blank.get_size()
+              or pygame.image.tobytes(drawn, "RGBA")
+              != pygame.image.tobytes(blank, "RGBA"))
+        self._known[key] = ok
+        return ok
+
     def line_height(self, size: str = "body") -> int:
         return self._fonts[size].get_linesize()
 
@@ -269,7 +322,7 @@ class FontBook:
             current = ""
             for char in paragraph:
                 trial = current + char
-                if current and font.size(trial)[0] > width:
+                if current and self._size(font, trial)[0] > width:
                     lines.append(current)
                     current = char
                 else:
