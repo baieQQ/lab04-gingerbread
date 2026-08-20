@@ -568,6 +568,33 @@ class Board:
                                    (pos[0] - radius // 3, pos[1] - radius // 3),
                                    max(2, radius // 6), 1)
 
+    def _ward(self, state: State, ticks: int) -> None:
+        """聖癒's shield, as a dome the player can see is still up.
+
+        Drawn thinning as it runs out, because the decision it drives is "do I
+        have time to get back" — and that question needs a countdown, not an
+        on/off light.
+        """
+        if state.ward <= 0:
+            return
+        left = min(1.0, state.ward / 8.0)
+        radius = int(34 + 4 * math.sin(ticks / 9.0))
+        self._fx.fill((0, 0, 0, 0))
+        pygame.draw.circle(self._fx, _clamp_colour((196, 224, 255), 40 * left),
+                           (int(C.SISTER_X), int(C.SISTER_Y)), radius)
+        for i in range(3):
+            pygame.draw.circle(
+                self._fx, _clamp_colour((214, 238, 255), (150 - i * 40) * left),
+                (int(C.SISTER_X), int(C.SISTER_Y)), radius - i * 3, 1)
+        # Sparks running round the rim, so it reads as held rather than painted.
+        for i in range(7):
+            a = ticks / 15.0 + i * math.tau / 7
+            pygame.draw.circle(
+                self._fx, _clamp_colour(P.MOON, 220 * left),
+                (int(C.SISTER_X + math.cos(a) * radius),
+                 int(C.SISTER_Y + math.sin(a) * radius)), 2)
+        self.surface.blit(self._fx, (0, 0))
+
     def _draw_sister(self, state: State, ticks: int) -> None:
         bob = math.sin(ticks / 37.0) * 1.2
         x, y = C.SISTER_X, C.SISTER_Y + bob
@@ -586,6 +613,8 @@ class Board:
                        build="small", phase=0.0, moving=False,
                        facing=(0.0, 1.0), hair=(196, 142, 68), skirt=True,
                        rim_from=(state.player.x - x, state.player.y - y))
+
+        self._ward(state, ticks)
 
         hearts = state.meta.max_sister_hp // 2
         for i in range(hearts):

@@ -293,6 +293,12 @@ class State:
     #: reads as a bug rather than as weather.
     mist_ticks: int = 0
 
+    #: Seconds of 聖癒's shield left on Gretel.  While this is above zero
+    #: nothing reaches her at all — it lives on the state rather than on the
+    #: player because it protects *her*, and she is not an entity the rules
+    #: carry a body for.
+    ward: float = 0.0
+
     combo: int = 0
     combo_ticks: int = 0
 

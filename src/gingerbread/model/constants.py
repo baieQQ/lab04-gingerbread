@@ -152,6 +152,9 @@ BURN_INTERVAL: Final = 0.75
 #: How far a boss lights itself while channelling.  Small — it is a beacon to
 #: walk toward, not a lamp that undoes the fog it just made.
 CHANNEL_LIGHT_RADIUS: Final = 58.0
+
+#: How hard 聖癒's shield throws off whatever walks into it.
+WARD_PUSH: Final = 150.0
 #: Damage multiplier while a boss is in that open state.
 EXPOSED_MULTIPLIER: Final = 2.0
 

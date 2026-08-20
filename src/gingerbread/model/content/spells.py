@@ -75,10 +75,11 @@ SPELLS: Final[dict[str, SpellSpec]] = {
 
     "blessing": SpellSpec(
         key="blessing", name="聖癒", element="light", tier=2,
-        description="八秒內照亮全場，並每四秒替兄妹各回一滴血",
+        description="八秒內在葛蕾特身上罩一層護罩，任何東西都碰不到她，"
+                    "撞上去的還會被彈開；期間每四秒替兄妹各回一滴血",
         cost=1, cooldown=30.0, duration=8.0,
         effect="mend_light", needs_target=False,
-        params={"every": 4.0},
+        params={"every": 4.0, "push": 150.0},
         colour=(255, 244, 206)),
 
     "windrun": SpellSpec(

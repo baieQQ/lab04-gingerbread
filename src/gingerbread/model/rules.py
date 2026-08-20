@@ -237,6 +237,13 @@ def _tick_skills(state: State, dt: float) -> None:
                         damage_target(state, target, 1, element="light",
                                       from_x=p.x, from_y=p.y)
 
+    if state.ward > 0:
+        state.ward = max(0.0, state.ward - dt)
+        if state.ward <= 0:
+            state.effects.append(
+                Effect("ward_off", C.SISTER_X, C.SISTER_Y, 0.5, 0.5, 70))
+            state.emit("ward_off")
+
     # 聖癒 — the only mid-night healing either of them gets.
     if p.mending > 0:
         p.mending = max(0.0, p.mending - dt)
@@ -631,6 +638,8 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
 
 def _reach_sister(state: State, monster: Monster, spec) -> None:
     """A monster got to Gretel.  This is the only way the run can be lost."""
+    if _warded(state, monster):
+        return
     damage = getattr(spec, "contact_damage", 1)
     if not state.meta.godmode:
         state.meta.sister_hp = max(0, state.meta.sister_hp - damage)
@@ -642,6 +651,22 @@ def _reach_sister(state: State, monster: Monster, spec) -> None:
 
 
 # ── bosses ───────────────────────────────────────────────────────────
+def _warded(state: State, monster: Monster | None) -> bool:
+    """True when 聖癒's shield is up — and it throws off whatever touched it.
+
+    Absorbing silently would read as the hit missing.  The shove is what says
+    *the shield did that*, which is the difference between a skill the player
+    trusts and one they are not sure they cast.
+    """
+    if state.ward <= 0:
+        return False
+    if monster is not None:
+        _push(monster, C.SISTER_X, C.SISTER_Y, C.WARD_PUSH)
+    state.effects.append(Effect("ward_hit", C.SISTER_X, C.SISTER_Y, 0.3, 0.3, 44))
+    state.emit("warded")
+    return True
+
+
 def _advance_bosses(state: State, dt: float) -> None:
     for boss in list(state.bosses):
         spec = BOSSES.get(boss.spec)
@@ -798,6 +823,8 @@ def _advance_projectiles(state: State, dt: float) -> None:
             if shot.kind not in C.SPARES_SISTER and g.circles_touch(
                     shot.x, shot.y, shot.radius,
                     C.SISTER_X, C.SISTER_Y, C.SISTER_REACH * 0.7):
+                if _warded(state, None):
+                    continue
                 if not state.meta.godmode:
                     state.meta.sister_hp = max(
                         0, state.meta.sister_hp - shot.damage)
@@ -1138,6 +1165,7 @@ def begin_night(state: State, director) -> State:
     p = state.player
     p.charging, p.charge_time = "", 0.0
     p.aura = p.aura_hits = p.haste = p.mending = p.holy = 0.0
+    state.ward = 0.0
     # Dawn puts her back together.  Carrying her wounds forward meant one bad
     # night quietly decided the next three, and a run could be lost hours before
     # it ended — the player was still playing, but the game was already over.

@@ -38,6 +38,11 @@ EVENT_SOUNDS: Final[dict[str, str]] = {
     "reflected:": "reflect",
     "guard": "guard",
     "guarded": "guard_hit",
+    # 聖癒's shield reuses the guard's clang on purpose: both are "that did not
+    # get through", and teaching the ear one sound for one meaning is worth
+    # more than a second sample that means the same thing.
+    "warded": "guard_hit",
+    "ward_off": "douse",
     "dash": "dash",
     "picked": "sugar",
     "player_hurt": "hurt",

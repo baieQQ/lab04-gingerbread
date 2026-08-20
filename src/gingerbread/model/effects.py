@@ -205,17 +205,30 @@ def storm_armour(state: State, spec) -> None:
     _expose_matching(state, spec)
 
 
-@spell("mend_light", label="聖癒", note="照亮全場，並持續治療兄妹兩人",
-       params={"every": (4.0, "幾秒回一滴血")})
+@spell("mend_light", label="聖癒",
+       note="在葛蕾特身上罩一層護罩，期間任何東西都碰不到她；同時持續替兄妹回血",
+       params={"every": (4.0, "幾秒回一滴血"),
+               "push": (150.0, "撞上護罩被彈開多遠")})
 def mend_light(state: State, spec) -> None:
-    """光 · 聖癒 — the only way Gretel's hearts come back mid-night."""
+    """光 · 聖癒 — a shield over the person, not a light over the field.
+
+    It used to be 聖光 with healing bolted on: same eight seconds, same
+    whole-map reveal, same element, same shelf.  Two skills that open with the
+    identical screen-wide flash are one skill the player picks by reading the
+    小字 — and nobody reads the 小字 at three in the morning with six monsters
+    on the field.
+
+    So it stops lighting anything.  It puts a wall around Gretel for eight
+    seconds: nothing reaches her, everything that tries is thrown off.  That
+    makes it the one skill that answers "I cannot get back in time", which is
+    the failure state this whole game is built out of — and it does it without
+    borrowing a single pixel from 聖光.
+    """
     p = state.player
     p.mending = float(spec.duration)
     p.mend_tick = 0.0
-    state.reveal_ticks = max(1, int(round(spec.duration / C.FIXED_DT)))
-    for target in _targets(state):
-        target.faded = 0.0
-    state.effects.append(Effect("holy", C.SISTER_X, C.SISTER_Y, 0.6, 0.6, 760))
+    state.ward = float(spec.duration)
+    state.effects.append(Effect("ward", C.SISTER_X, C.SISTER_Y, 0.7, 0.7, 90))
     state.feedback.bump(shake=2.0)
     _expose_matching(state, spec)
 
