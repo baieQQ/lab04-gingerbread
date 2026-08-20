@@ -125,6 +125,10 @@ class MenuScene(Scene):
                   enabled=False)
         if ui.button("codex", col.slot(ui.s(50)), "圖鑑"):
             app.push(CodexScene(self.g))
+        if ui.button("ledger", col.slot(ui.s(50)), "成績單"):
+            app.push(LedgerScene(self.g,
+                                 victory=self.g.saved.best_night
+                                 >= m.constants.CAMPAIGN_NIGHTS))
         on = self.g.onboarding
         if ui.button("guide", col.slot(ui.s(50)),
                      f"新手引導：{'開' if on else '關'}"):
@@ -544,11 +548,21 @@ class MapScene(Scene):
     def __init__(self, app_state) -> None:
         self.g = app_state
         self.t = 0.0
+        #: 玩家在地圖上點選的那一夜；None 代表還沒動過，就走現在這一夜。
+        self.picked: int | None = None
+
+    def furthest(self) -> int:
+        """可以走到的最遠一夜 —— 過關過的都能重走，再加下一夜。"""
+        best = max(self.g.saved.best_night, self.g.state.meta.night)
+        return max(1, min(m.constants.CAMPAIGN_NIGHTS, best + 1))
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
         self.t += dt
         state = self.g.state
-        night = max(1, min(m.constants.CAMPAIGN_NIGHTS, state.meta.night))
+        if self.picked is None:
+            self.picked = max(1, min(m.constants.CAMPAIGN_NIGHTS,
+                                     state.meta.night))
+        night = self.picked
         best = self.g.saved.best_night
 
         if not _backdrop(self, ui, "title.map", 150):
@@ -558,7 +572,7 @@ class MapScene(Scene):
         ui.text("七夜", (ui.s(MID), ui.s(52)), "title", P.EMBER, "center")
         total = self.g.saved.total_stars
         cap = 3 * m.constants.CAMPAIGN_NIGHTS
-        ui.text(f"從村子的廣場，一路走回那間屋子。　★ {total} / {cap}",
+        ui.text(f"點節點選一夜　·　★ {total} / {cap}",
                 (ui.s(MID), ui.s(88)), "small",
                 P.SUGAR if total else P.BONE_DIM, "center")
 
@@ -571,12 +585,31 @@ class MapScene(Scene):
         self._caption(ui, night)
 
         ready = drawn >= 1.0
+        # 點節點選夜。走過的都能重走 —— 想刷星等的人不必從第一夜再跑一次。
+        limit = self.furthest()
+        for index, (nx, ny) in enumerate(self.NODES):
+            number = index + 1
+            if number > limit or not ready:
+                continue
+            cell = ui.box(nx - 22, ny - 22, 44, 44)
+            if ui.button(f"pick{number}", cell, "", fill=P.with_alpha(
+                    P.INK[:3], 0)) and number != self.picked:
+                self.picked = number
+                return
+
         label = "走進第 %d 夜" % night
         if ui.button("go", ui.box(MID - 140, 578, 280, 46), label,
                      enabled=ready):
-            app.pop()
+            self._walk(app, night)
         if ready and (pygame.K_SPACE in ui.keys or pygame.K_RETURN in ui.keys):
-            app.pop()
+            self._walk(app, night)
+
+    def _walk(self, app: SceneStack, night: int) -> None:
+        """關掉地圖，必要的話把整局搬到選好的那一夜。"""
+        if night != self.g.state.meta.night:
+            self.g.act(f"goto:{night}")
+            self.g.story_shown = night
+        app.pop()
 
     # ── pieces ───────────────────────────────────────────────────────
     def _scenery(self, ui: UI) -> None:
@@ -667,6 +700,10 @@ class MapScene(Scene):
         pos = (ui.s(x), ui.s(y))
 
         if here:
+            # 選中的那一夜多一圈外框，這樣「呼吸的那顆」跟「我點了哪顆」是
+            # 同一件事，不會有兩個地方在爭玩家的注意力。
+            pygame.draw.circle(ui.surface, P.SUGAR, pos,
+                               ui.s(26), max(1, ui.s(2)))
             # The one you are about to walk into breathes.  Nothing else on the
             # screen moves, so this is the only thing the eye can land on.
             pulse = 0.5 + math.sin(self.t * 3.4) * 0.5
@@ -1846,7 +1883,7 @@ class ResultScene(Scene):
         # away the frame we just spent two seconds keeping.
         # 高度照實際內容算出來，不是寫死的 330 —— 敗北有三顆按鈕、勝利只有
         # 兩顆，而 330 只夠蓋到第二顆的一半，第三顆是浮在畫面上的。
-        buttons = 2 if state.phase is m.Phase.VICTORY else 3
+        buttons = 3
         tall = 200 + buttons * 58
         scrim = ui.box(MID - 250, 96, 500, tall)
         ui.panel(scrim, P.with_alpha(P.INK[:3], 216), P.LINE)
@@ -1867,6 +1904,9 @@ class ResultScene(Scene):
 
         col = _col(ui, MID - 160, 262, 320, 200, gap=10)
         if won:
+            # 打倒女巫之後直接跳回選單，是把七個晚上結束在一行字上。
+            if ui.button("ledger", col.slot(ui.s(46)), "看看這一輪"):
+                app.push(LedgerScene(self.g, victory=True))
             if ui.button("again", col.slot(ui.s(46)), "再玩一次"):
                 self.g.restart()
                 app.pop()
@@ -1885,6 +1925,113 @@ class ResultScene(Scene):
                 app.pop()
         if ui.button("menu", col.slot(ui.s(46)), "回選單"):
             self.g.to_menu(app)
+
+
+
+# ── 全程成績單 ───────────────────────────────────────────────────────
+class LedgerScene(Scene):
+    """七夜走完之後的那一頁：整輪跑了什麼，一次看完。
+
+    單夜的評分在天亮那一刻出現一次就沒了，所以玩家從來沒有機會看到「我這一輪
+    整體打得怎樣」。打倒女巫之後直接跳回選單，是把七個晚上的努力結束在一行字
+    上 —— 這一頁存在的理由就是不要那樣。
+
+    三件事：每一夜幾顆星、每一夜打了幾次、加起來是什麼。星等是成績，次數是
+    故事 —— 第一次就過的第三夜，跟打了七次才過的第三夜，是兩段完全不同的
+    經歷，而遊戲結束的時候應該記得那個差別。
+    """
+
+    def __init__(self, app_state, *, victory: bool = True) -> None:
+        self.g = app_state
+        self.victory = victory
+        self.t = 0.0
+
+    def update(self, app: SceneStack, ui: UI, dt: float) -> None:
+        self.t += dt
+        meta = self.g.saved
+        if not _backdrop(self, ui, "title.dawn", 214):
+            ui.veil(244)
+
+        head = "七夜之後" if self.victory else "走到這裡"
+        ui.text(head, (ui.s(MID), ui.s(56)), "huge", P.EMBER, "center")
+        ui.text("村子安靜下來了。她還在你身後。" if self.victory
+                else "還沒走完，但走過的都算數。",
+                (ui.s(MID), ui.s(96)), "small", P.BONE_DIM, "center")
+
+        self._table(ui, meta)
+        self._total(ui, meta)
+
+        if ui.button("back", ui.box(MID - 130, 578, 260, 46), "回主選單"):
+            self.g.to_menu(app)
+
+    def _table(self, ui: UI, meta) -> None:
+        """七列：夜、王、星、次數。"""
+        top = 138
+        ui.text("夜", (ui.s(MID - 250), ui.s(top)), "small", P.MUTED)
+        ui.text("頭目", (ui.s(MID - 200), ui.s(top)), "small", P.MUTED)
+        ui.text("評價", (ui.s(MID + 30), ui.s(top)), "small", P.MUTED)
+        ui.text("挑戰次數", (ui.s(MID + 150), ui.s(top)), "small", P.MUTED)
+
+        for night in range(1, m.constants.CAMPAIGN_NIGHTS + 1):
+            y = top + 26 + (night - 1) * 30
+            stage = STAGES.get(night)
+            boss = BOSSES.get(stage.boss) if stage and stage.boss else None
+            stars = (meta.night_stars[night]
+                     if night < len(meta.night_stars) else 0)
+            tries = (meta.night_tries[night]
+                     if night < len(meta.night_tries) else 0)
+            done = stars > 0
+            ink = P.BONE if done else P.MUTED
+
+            ui.text(str(night), (ui.s(MID - 250), ui.s(y)), "small", ink)
+            ui.text(boss.name if boss else "沒有頭目",
+                    (ui.s(MID - 200), ui.s(y)), "small",
+                    P.BOSS if done else P.MUTED)
+            self._stars(ui, ui.s(MID + 34), ui.s(y), stars)
+            # 沒過的那幾夜寫「—」而不是 0 次：0 次代表沒去過，跟去了沒過完全
+            # 不同，而那個差別是這張表唯一在講的東西。
+            ui.text("—" if not tries else f"{tries} 次",
+                    (ui.s(MID + 150), ui.s(y)), "small", ink)
+
+    @staticmethod
+    def _stars(ui: UI, x: int, y: int, got: int) -> None:
+        step = ui.s(13)
+        for i in range(3):
+            colour = P.SUGAR if i < got else P.LINE
+            cx, cy = x + i * step, y
+            pygame.draw.polygon(ui.surface, colour, [
+                (cx, cy - ui.s(5)), (cx + ui.s(5), cy + ui.s(4)),
+                (cx - ui.s(5), cy - ui.s(1)), (cx + ui.s(5), cy - ui.s(1)),
+                (cx - ui.s(5), cy + ui.s(4))])
+
+    def _total(self, ui: UI, meta) -> None:
+        nights = m.constants.CAMPAIGN_NIGHTS
+        cleared = sum(1 for n in range(1, nights + 1)
+                      if n < len(meta.night_stars) and meta.night_stars[n])
+        box = ui.box(MID - 250, 368, 500, 92)
+        ui.panel(box, P.INK, P.LINE)
+        ui.text(f"★ {meta.total_stars} / {nights * 3}",
+                (box.centerx, box.top + ui.s(26)), "big",
+                P.SUGAR if meta.total_stars else P.MUTED, "center")
+        ui.text(f"通過 {cleared} / {nights} 夜　·　"
+                f"總共挑戰 {meta.total_tries} 次",
+                (box.centerx, box.bottom - ui.s(22)), "small",
+                P.BONE_DIM, "center")
+
+        # 一句話的評語，讀的是「幾顆星」而不是「有沒有通關」—— 通關是門檻，
+        # 星等才是這一輪打得怎樣。
+        share = meta.total_stars / max(1, nights * 3)
+        if not self.victory:
+            line = "她還在等你走完剩下的。"
+        elif share >= 0.94:
+            line = "七夜，沒有一夜是勉強過的。"
+        elif share >= 0.75:
+            line = "有幾夜很險，但你都撐住了。"
+        elif share >= 0.5:
+            line = "你把她帶到了最後。那就夠了。"
+        else:
+            line = "傷痕累累，但你們兩個都還在。"
+        ui.text(line, (ui.s(MID), ui.s(486)), "body", P.EMBER, "center")
 
 
 # ── pause ────────────────────────────────────────────────────────────
@@ -2060,7 +2207,7 @@ class CodexScene(Scene):
         element = ELEMENTS.get(spec.element, {}).get("name", "")
         stats = (f"{element}　技能點 {spec.cost}　冷卻 {spec.cooldown:.0f} 秒　"
                  + (f"持續 {spec.duration:.0f} 秒" if spec.duration else "瞬間"))
-        return (spec.name, stats, spec.description)
+        return (spec.name, stats, spec.description, f"icon.{spec.key}")
 
 
 def build_menu(app_state) -> Scene:

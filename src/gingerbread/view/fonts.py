@@ -138,12 +138,32 @@ class FontBook:
         rendered, and no amount of font work fixes that.
         """
         self.scale = scale
-        self._fonts = {name: load_font(max(8, int(round(size * scale))), root)
-                       for name, size in self.SIZES.items()}
+        self._root = root
+        self._pixels = {name: max(8, int(round(size * scale)))
+                        for name, size in self.SIZES.items()}
+        self._fonts = {name: load_font(px, root)
+                       for name, px in self._pixels.items()}
         self._cache: dict[tuple[str, str, RGB], pygame.Surface] = {}
         #: Strings already reported as unrenderable, so one bad label logs once
         #: instead of sixty times a second.
         self._warned: set[str] = set()
+
+    def _revive(self, size: str) -> None:
+        """丟掉一個出過錯的字型物件，重新開一份。
+
+        SDL_ttf 在 "Couldn't find glyph" 之後**不會自己恢復** —— 那個 Font 物
+        件從此每一次 render 都回傳空白。所以「吞掉例外繼續跑」這個做法，會把
+        一次缺字放大成整個畫面從此沒有文字：評分頁只剩幾根長條和兩張立繪，
+        而那正是它壞掉的樣子。
+
+        重開一份是唯一乾淨的復原方式，而且很便宜（只發生在出錯的那一次）。
+        算過的快取也要一起丟，否則已經存進去的空白會被一直拿出來用。
+        """
+        try:
+            self._fonts[size] = load_font(self._pixels[size], self._root)
+        except Exception:                              # noqa: BLE001
+            return
+        self._cache = {k: v for k, v in self._cache.items() if k[1] != size}
 
     def font(self, size: str = "body") -> pygame.font.Font:
         """Return the raw pygame font for measurement or custom rendering."""
@@ -177,6 +197,7 @@ class FontBook:
                 print(f"[gingerbread] 這行字畫不出來（{size}）：{text!r} — {exc}")
             surface = pygame.Surface((1, self.line_height(size)),
                                      pygame.SRCALPHA)
+            self._revive(size)
         self._cache[key] = surface
         return surface
 
@@ -216,6 +237,10 @@ class FontBook:
             if text not in self._warned:
                 self._warned.add(text)
                 print(f"[gingerbread] 這行字量不出寬度：{text!r} — {exc}")
+            for name, existing in self._fonts.items():
+                if existing is font:
+                    self._revive(name)
+                    break
             # 退回一個估計值：中日韓字大約是行高的寬度，其餘算一半。
             unit = font.get_linesize()
             wide = sum(1 for ch in text if ord(ch) > 0x2E7F)

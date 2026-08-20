@@ -304,6 +304,9 @@ def parse_action(action: str) -> tuple[str, object]:
                               f"slot {index} takes tier {want}")
         return ("slot", (int(index), key))
 
+    if action.startswith("goto:"):
+        return ("goto", action[5:])
+
     for prefix, table, label in (("cast:", SPELL_TABLE, "spell"),
                                  ("prepare:", SPELL_TABLE, "spell"),
                                  ("learn:", SPELL_TABLE, "spell"),
@@ -382,6 +385,25 @@ def apply_action(state: State, action: str) -> State:
         nxt.meta.godmode = not nxt.meta.godmode
         nxt.emit("godmode:on" if nxt.meta.godmode else "godmode:off")
         return nxt
+
+    if verb == "goto":
+        # 走去某一夜。地圖上選好之後按開始走的就是這條路。
+        #
+        # 跟 skipnight 一樣走 new_game 帶 meta 重開，所以選關拿到的白天跟正常
+        # 過關拿到的是同一個東西 —— 不是另一條會慢慢長歪的路。
+        try:
+            want = int(payload)
+        except ValueError:
+            return nxt
+        if nxt.meta.mode is not Mode.CAMPAIGN:
+            return nxt
+        want = max(1, min(C.CAMPAIGN_NIGHTS, want))
+        if want == nxt.meta.night:
+            return nxt
+        carried = deepcopy(nxt.meta)
+        carried.night = want
+        carried.sister_hp = carried.max_sister_hp
+        return new_game(nxt.seed, carried)
 
     if verb == "skipnight":
         # 跳到下一夜的白天。測試用 —— 第四夜以後的怪，不該每次都要從第一夜
