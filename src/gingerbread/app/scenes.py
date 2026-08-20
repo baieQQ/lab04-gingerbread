@@ -1842,33 +1842,39 @@ class PauseScene(Scene):
         ui.veil(200)
         ui.text("暫停", (ui.s(MID), ui.s(130)), "big", P.EMBER, "center")
 
-        col = _col(ui, MID - 140, 176, 280, 350, gap=7)
-        if ui.button("resume", col.slot(ui.s(42)), "繼續"):
+        # 一律只有標題，沒有副標。
+        #
+        # 有副標的按鈕會靠左排成兩行，沒有的則置中排一行 —— 六顆按鈕混著兩種
+        # 排版，眼睛要在每一顆上重新對焦一次。而那些副標說的事情，其實都是
+        # 按下去就會知道的：「保留糖霜」按了才有意義，「這一場會結束」是常識。
+        # 拿掉之後這裡從一張說明書變回一份清單。
+        col = _col(ui, MID - 140, 186, 280, 330, gap=8)
+        if ui.button("resume", col.slot(ui.s(46)), "繼續"):
             app.pop()
         # 打壞了就重來，不用先輸掉。原本只能一路撐到葛蕾特被抓走才有這個
         # 選項，所以一場已經崩掉的夜晚還得花一分鐘把它輸完。
-        if ui.button("retry", col.slot(ui.s(42)), "重新開始這一夜",
-                     "保留糖霜、升級和技能"):
+        if ui.button("retry", col.slot(ui.s(46)), "重新開始這一夜"):
             self.game.session.retry_night()
             while app.scenes and not isinstance(app.top, PlayScene):
                 app.pop()
             return
-        if ui.button("codex", col.slot(ui.s(42)), "圖鑑"):
+        if ui.button("codex", col.slot(ui.s(46)), "圖鑑"):
             app.push(CodexScene(self.g))
         on = self.g.onboarding
-        if ui.button("guide", col.slot(ui.s(42)),
-                     f"新手引導：{'開' if on else '關'}",
-                     "怪物體驗關與操作說明"):
+        if ui.button("guide", col.slot(ui.s(46)),
+                     f"新手引導：{'開' if on else '關'}"):
             self.g.set_onboarding(not on)
-        if ui.button("full", col.slot(ui.s(42)),
-                     "切換視窗" if self.game.fullscreen else "切換全螢幕", "F11"):
+        if ui.button("full", col.slot(ui.s(46)),
+                     "切換視窗" if self.game.fullscreen else "切換全螢幕"):
             self.game.toggle_fullscreen()
-        if ui.button("menu", col.slot(ui.s(42)), "回主選單", "這一場會結束"):
+        if ui.button("menu", col.slot(ui.s(46)), "回主選單"):
             self.g.to_menu(app)
-        if ui.button("quit", col.slot(ui.s(42)), "離開遊戲"):
+        if ui.button("quit", col.slot(ui.s(46)), "離開遊戲"):
             self.game.running = False
 
-        ui.text("Esc 也可以直接關掉這個選單",
+        # 被拿掉的那幾條提示，改成一行放在最下面 —— 它們是操作說明，不是每顆
+        # 按鈕的註腳。
+        ui.text("Esc 關掉這個選單　·　F11 全螢幕　·　回主選單會結束這一場",
                 (ui.s(MID), ui.s(604)), "small", P.MUTED, "center")
 
 
