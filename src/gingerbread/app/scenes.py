@@ -49,6 +49,33 @@ def _col(ui: UI, x: float, y: float, w: float, h: float, gap: float = 8):
 
 
 # ── menu ─────────────────────────────────────────────────────────────
+def _backdrop(scene, ui: UI, key: str, dim: int) -> bool:
+    """把 ``key`` 這張圖 cover 鋪滿，再壓一層 ``dim``。沒有圖回傳 False。
+
+    cover 而不是拉伸：每一張背景的構圖都是刻意的（提燈在左下、路從左下通到
+    右上、壁爐在左邊），拉扁它等於把構圖丟掉。
+
+    ``dim`` 每個畫面各給各的，因為每張圖的亮度差很多 —— 天亮那張是整片淺黃
+    的天空，用主選單那個 158 會讓白字直接消失在裡面。
+    """
+    art = scene.g.assets.image(key)
+    if art is None:
+        return False
+    target = ui.surface.get_size()
+    aw, ah = art.get_size()
+    k = max(target[0] / aw, target[1] / ah)
+    size = (max(1, int(aw * k)), max(1, int(ah * k)))
+    cache = f"{key}#cover{size[0]}x{size[1]}"
+    scaled = scene.g.assets._images.get(cache)
+    if scaled is None:
+        scaled = pygame.transform.smoothscale(art, size)
+        scene.g.assets._images[cache] = scaled
+    ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
+                             (target[1] - size[1]) // 2))
+    ui.veil(dim)
+    return True
+
+
 class MenuScene(Scene):
     """The start screen: pick a mode.
 
@@ -86,21 +113,20 @@ class MenuScene(Scene):
         ui.text("這一次，換他來保護妹妹。",
                 (ui.s(MID), ui.s(142)), "body", P.BONE_DIM, "center")
 
-        col = _col(ui, MID - 170, 196, 340, 220, gap=12)
-        if ui.button("campaign", col.slot(ui.s(60)), "七夜",
-                     "撐過七個夜晚，每一夜都有牠們的頭目"):
+        # 跟暫停選單一樣，一律只有標題。混著兩種排版的清單，眼睛要在每一顆
+        # 按鈕上重新對焦一次。
+        col = _col(ui, MID - 170, 200, 340, 216, gap=10)
+        if ui.button("campaign", col.slot(ui.s(50)), "七夜"):
             self._go(app, m.Mode.CAMPAIGN)
-
         # 無盡還沒調到能見人的程度，先關起來 —— 一個做不完的模式擺在那裡讓
         # 人點下去，比暫時不給它更傷。
-        ui.button("endless", col.slot(ui.s(60)), "無盡",
-                  "敬請期待", enabled=False)
-        if ui.button("codex", col.slot(ui.s(42)), "圖鑑", "看看你會遇到什麼"):
+        ui.button("endless", col.slot(ui.s(50)), "無盡（敬請期待）",
+                  enabled=False)
+        if ui.button("codex", col.slot(ui.s(50)), "圖鑑"):
             app.push(CodexScene(self.g))
         on = self.g.onboarding
-        if ui.button("guide", col.slot(ui.s(42)),
-                     f"新手引導：{'開' if on else '關'}",
-                     "操作說明與怪物體驗關"):
+        if ui.button("guide", col.slot(ui.s(50)),
+                     f"新手引導：{'開' if on else '關'}"):
             self.g.set_onboarding(not on)
 
         self._difficulty(ui)
@@ -116,29 +142,9 @@ class MenuScene(Scene):
                 (ui.s(MID), ui.s(614)), "small", P.MUTED, "center")
 
     def _backdrop(self, ui: UI) -> None:
-        """主視覺鋪滿，字壓在上面；沒有圖就退回原本的純色。
-
-        照 cover 的方式裁切而不是拉伸 —— 主視覺的構圖是刻意的（提燈在左下、
-        糖果屋在右上），拉扁它等於把那個構圖丟掉。
-        """
-        art = self.g.assets.image("title.menu")
-        if art is None:
+        # 158：字壓在畫上面會糊，壓到這裡對比夠了，畫也還在。
+        if not _backdrop(self, ui, "title.menu", 158):
             ui.veil(252)
-            return
-        target = ui.surface.get_size()
-        aw, ah = art.get_size()
-        k = max(target[0] / aw, target[1] / ah)
-        size = (max(1, int(aw * k)), max(1, int(ah * k)))
-        key = f"title.menu#cover{size[0]}x{size[1]}"
-        scaled = self.g.assets._images.get(key)
-        if scaled is None:
-            scaled = pygame.transform.smoothscale(art, size)
-            self.g.assets._images[key] = scaled
-        ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
-                                 (target[1] - size[1]) // 2))
-        # 字壓在畫上面就會糊。壓到 158 之後對比夠了，畫也還在 —— 主視覺是
-        # 背景，不是要跟文字搶注意力的東西。
-        ui.veil(158)
 
 
     def _difficulty(self, ui: UI) -> None:
@@ -345,7 +351,10 @@ class TutorialScene(Scene):
 
     def _draw_keys(self, ui: UI) -> None:
         """固定顯示的操作速查列。"""
-        ui.text("Esc　關閉新手引導", (ui.s(150), ui.s(572)), "small", P.MUTED)
+        # 552..592 是「Enter 下一頁」那塊面板的位置。這行原本靠左放在 572，
+        # 剛好從面板左邊 260 底下穿過去 —— 字被蓋掉一半。移到面板下面。
+        ui.text("Esc　關閉新手引導", (ui.s(MID), ui.s(614)),
+                "small", P.MUTED, "center")
         cells = Stack.split(ui.box(150, 500, 600, 44), 4, gap=ui.s(10))
         controls = (
             ("WASD", "移動"),
@@ -541,8 +550,10 @@ class MapScene(Scene):
         night = max(1, min(m.constants.CAMPAIGN_NIGHTS, state.meta.night))
         best = self.g.saved.best_night
 
-        ui.veil(252)
-        self._scenery(ui)
+        if not _backdrop(self, ui, "title.map", 150):
+            ui.veil(252)
+        if self.g.assets.image("title.map") is None:
+            self._scenery(ui)   # 沒有背景圖才自己畫樹
         ui.text("七夜", (ui.s(MID), ui.s(52)), "title", P.EMBER, "center")
         total = self.g.saved.total_stars
         cap = 3 * m.constants.CAMPAIGN_NIGHTS
@@ -948,8 +959,11 @@ class PlayScene(Scene):
         # Dim the board only.  Veiling the whole canvas greyed out the HUD as
         # well, which is the one thing that has to stay readable while the
         # player decides what to spend.
-        ui.panel(ui.box(0, HUD_H, 900, m.HEIGHT + RAIL_H),
-                 P.with_alpha(P.VOID, 222), None)
+        # 白天的商店蓋掉整片戰場：那個房間是玩家花糖霜的地方，不是他昨晚
+        # 打過的空地。有背景圖就鋪圖，沒有才退回原本的深色板。
+        if not _backdrop(self, ui, "title.day", 176):
+            ui.panel(ui.box(0, HUD_H, 900, m.HEIGHT + RAIL_H),
+                     P.with_alpha(P.VOID, 222), None)
         stage = stage_for(state.meta.night)
 
         ui.text(f"第 {state.meta.night} 夜　白天", (ui.s(MID), ui.s(64)),
@@ -1614,7 +1628,9 @@ class DawnScene(Scene):
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
         state = self.g.state
-        ui.veil(238)
+        # 天亮那張是整片淺黃的天空，壓得比別人重才看得到白字。
+        if not _backdrop(self, ui, "title.dawn", 214):
+            ui.veil(238)
 
         ui.text(f"撐過了第 {state.meta.night} 夜", (ui.s(MID), ui.s(92)),
                 "big", P.BONE, "center")
@@ -1898,7 +1914,8 @@ class CodexScene(Scene):
         self.scroll = 0
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
-        ui.veil(250)
+        if not _backdrop(self, ui, "title.codex", 196):
+            ui.veil(250)
         ui.text("圖鑑", (ui.s(MID), ui.s(38)), "big", P.EMBER, "center")
 
         tabs = Stack.split(ui.box(MID - 210, 64, 420, 32), 3, gap=ui.s(6))
