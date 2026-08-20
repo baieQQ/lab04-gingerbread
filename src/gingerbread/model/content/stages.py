@@ -55,14 +55,14 @@ STAGES: Final[dict[int, StageSpec]] = {
     4: StageSpec(
         night=4, map_key="market",
         recipe=("faint", "digger", "bomber", "villager", "armoured",
-                "child", "riser", "mudling", "brute"),
+                "child", "mudling", "brute"),
         surges=(12.0, 26.0, 40.0),
         boss="mist_reaper", elites=2,
         tagline="霧裡的人影一閃而過。那張臉像極了村民。"),
 
     5: StageSpec(
         night=5, map_key="chapel",
-        recipe=("bomber", "armoured", "child", "mudling", "riser",
+        recipe=("bomber", "armoured", "child", "mudling",
                 "faint", "brute", "splitter", "archer", "villager"),
         surges=(12.0, 24.0, 36.0, 48.0),
         boss="ash_hob", elites=2,
@@ -70,7 +70,7 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     6: StageSpec(
         night=6, map_key="butchery",
-        recipe=("armoured", "riser", "brute", "bomber", "digger",
+        recipe=("armoured", "brute", "bomber", "digger",
                 "armoured", "child", "mirror", "villager", "brute"),
         surges=(10.0, 20.0, 32.0, 44.0),
         boss="moonfall", elites=3,
@@ -78,7 +78,7 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     7: StageSpec(
         night=7, map_key="deep_forest",
-        recipe=("brute", "faint", "armoured", "bomber", "riser",
+        recipe=("brute", "faint", "armoured", "bomber",
                 "digger", "archer", "splitter", "mudling", "child"),
         surges=(8.0, 18.0, 28.0, 38.0, 48.0),
         boss="witch", elites=3,

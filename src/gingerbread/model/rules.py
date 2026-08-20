@@ -1318,6 +1318,7 @@ def begin_night(state: State, director) -> State:
     if state.phase is not Phase.DAY:
         return state
     state.phase = Phase.NIGHT
+    state.meta.count_try(state.meta.night)
     state.dusk = 0.0
     state.fog_scale = 1.0
     state.hazards = []

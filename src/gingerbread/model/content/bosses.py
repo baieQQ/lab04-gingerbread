@@ -145,7 +145,7 @@ BOSSES: Final[dict[str, BossSpec]] = {
                       announce="隕石總是砸向你「現在」站的地方。站好，然後閃開。"),
             BossPhase(until_hp=0.0, behaviour="flank",
                       params={"orbit": 175.0, "patience": 99.0},
-                      summons=(("armoured", 6.0), ("riser", 7.0)),
+                      summons=(("armoured", 6.0), ("bomber", 7.0)),
                       announce="它砸得更快了——也更容易砸到自己。"),
         )),
 

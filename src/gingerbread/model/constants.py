@@ -144,6 +144,8 @@ WEAKNESS_WINDOW: Final = 3.0
 HOLY_SLOW: Final = 0.72
 #: 王被打斷之後，多久之內不會再被打斷。
 BOSS_FLINCH_GAP: Final = 2.0
+#: 有王的夜晚，生怪間隔乘上這個數 —— 王和它的護衛已經是那一夜的壓力來源。
+BOSS_NIGHT_SPAWN_GAP: Final = 1.55
 #: 接觸類技能（疾風、雷鳴）對王的傷害間隔。
 CONTACT_GAP: Final = 0.9
 

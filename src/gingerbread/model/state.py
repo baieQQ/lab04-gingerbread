@@ -98,6 +98,14 @@ class Meta:
     #: upgrade key -> how many times it has been bought.  See content/upgrades.
     upgrades: dict[str, int] = field(default_factory=dict)
 
+    #: 每一夜挑戰過幾次。索引就是夜數。
+    #:
+    #: 一份只有「你過了」的成績單，講不出這一輪是怎麼過的 —— 第一次就過的第
+    #: 三夜，跟打了七次才過的第三夜，是兩段完全不同的經歷，而遊戲結束的時候
+    #: 應該記得那個差別。
+    night_tries: list[int] = field(
+        default_factory=lambda: [0] * (C.CAMPAIGN_NIGHTS + 1))
+
     #: 每一夜拿到幾顆星（0 = 還沒過）。索引就是夜數。
     #:
     #: 單夜的評分只在天亮那一頁出現一次，看完就沒了 —— 玩家沒有任何地方能
@@ -144,6 +152,16 @@ class Meta:
     def level(self, key: str) -> int:
         """How many times ``key`` has been bought.  Absent means zero."""
         return self.upgrades.get(key, 0)
+
+    def count_try(self, night: int) -> None:
+        """記下這一夜又被挑戰了一次。"""
+        while len(self.night_tries) <= night:
+            self.night_tries.append(0)
+        self.night_tries[night] += 1
+
+    @property
+    def total_tries(self) -> int:
+        return sum(self.night_tries)
 
     def award_stars(self, night: int, stars: int) -> None:
         """記下這一夜的星等，只往上不往下。

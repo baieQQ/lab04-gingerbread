@@ -68,8 +68,9 @@ def _kill_within(state: State, x: float, y: float, radius: float,
 
 # ── 一階 ─────────────────────────────────────────────────────────────
 @spell("smite", label="閃電",
-       note="範圍內的敵人被劈到只剩一滴血、護甲全碎，並被轟開",
+       note="範圍內的敵人護甲全碎、吃一份固定傷害，活下來的只剩一滴血",
        params={"radius": (62.0, "打得到多寬"),
+               "damage": (3.0, "固定傷害"),
                "push": (210.0, "擊退距離"),
                "slow": (0.3, "焦地上剩幾成速度"),
                "slow_life": (4.5, "焦地留多久"),
@@ -94,6 +95,7 @@ def smite(state: State, spec) -> None:
     radius = float(spec.params.get("radius", 62.0))
     push = float(spec.params.get("push", 210.0))
     boss_damage = int(spec.params.get("boss", 6))
+    damage = int(spec.params.get("damage", 3))
     struck = 0
 
     for target in _targets(state):
@@ -109,7 +111,15 @@ def smite(state: State, spec) -> None:
                 damage_target(state, target, boss_damage, element=spec.element,
                               from_x=p.x, from_y=p.y)
             continue
+        # 先破甲，再打固定傷害，活下來的一律剩一滴血。
+        #
+        # 只有「剩一滴血」的話，玩家放完看到的是一整片沒有人倒下 —— 那讀起來
+        # 就是沒有傷害，不管數字上發生了什麼。固定傷害讓輕的那一群當場清空，
+        # 破甲讓重的那幾隻變成一下就能收 —— 兩件事一起做，這個技能才同時有
+        # 「爽」和「戰術價值」。
         target.armour = 0
+        damage_target(state, target, damage, element=spec.element,
+                      from_x=p.x, from_y=p.y)
         if target.hp > 1:
             target.hp = 1
             target.hit_flash = 0.14

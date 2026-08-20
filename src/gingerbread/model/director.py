@@ -134,6 +134,14 @@ class CampaignDirector:
         seconds = (stage.spawn_interval if stage.spawn_interval is not None
                    else max(1.4, 4.2 - state.meta.night * 0.28))
         seconds *= float(state.meta.dials["spawn_gap"])
+        # 有王的夜晚，小怪來得慢一點。
+        #
+        # 王本身就是那一夜的主題：它有階段、有台詞、有要學的弱點。而它同時
+        # 還在自己召喚護衛 —— 所以王之夜的實際壓力是「一般夜的生怪」加上
+        # 「王的召喚」加上「王本人」，三份疊在一起。玩家沒有時間看王在做什麼，
+        # 那一夜就退化成又一輪清場。
+        if stage.boss:
+            seconds *= C.BOSS_NIGHT_SPAWN_GAP
         interval = to_ticks(seconds)
         state.spawn_ticks += 1
         if state.spawn_ticks >= interval and state.ticks_elapsed > to_ticks(3.0):

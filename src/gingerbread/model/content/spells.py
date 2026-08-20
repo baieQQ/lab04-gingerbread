@@ -31,9 +31,9 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     # ── 一階 · 一點技能點 ───────────────────────────────────────────
     "bolt": SpellSpec(
         key="bolt", name="閃電", element="thunder", tier=1,
-        description="範圍內的敵人被劈到只剩一滴血、護甲全碎，並被轟飛出去；"
+        description="大範圍劈下閃電：護甲全碎、吃三點傷害，活下來的只剩一滴血；"
                     "落點留下一片電焦的地面，走進去的只剩三成速度",
-        cost=1, cooldown=16.0, duration=0.0,
+        cost=1, cooldown=20.0, duration=0.0,
         effect="smite",
         # 傷害 2 的時候，範圍內大部分的怪（3-5 滴血）被震開之後照樣活著，
         # 玩家看到的是「怪飛走了，沒人死」—— 那讀起來就是沒有傷害。3 讓輕的
@@ -42,9 +42,9 @@ SPELLS: Final[dict[str, SpellSpec]] = {
         # 玩家放完看到兩隻閃一下，讀起來像什麼都沒發生；220 是差不多半個場地，
         # 一放下去整片都剩一滴血，接著一輪揮燈可以收乾淨 —— 那才是「破甲」該
         # 有的感覺。
-        params={"radius": 220.0, "push": 210.0,
+        params={"radius": 320.0, "damage": 3.0, "push": 210.0,
                 "boss": 6.0, "slow": 0.3, "slow_life": 4.5,
-                "slow_radius": 96.0},
+                "slow_radius": 110.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(

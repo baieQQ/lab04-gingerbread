@@ -146,10 +146,16 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
     # ── 8｜盔甲怪 ───────────────────────────────────────────────────
     "armoured": MonsterSpec(
         key="armoured", name="盔甲怪",
-        hp=4, speed=25.0, radius=14.0, sugar=3,
+        # 血 3、甲 2。
+        #
+        # 這隻怪從第一天就有 4+3，只是 spawn 特性從來沒觸發過，所以護甲一直
+        # 是 0 —— 它實際上跟村民一樣脆。修好之後它突然變成七滴血的東西，出現
+        # 在第三夜，而玩家會以為那是 bug（「有一隻黃色的要打三下」）。它本來
+        # 就該比較硬，但不該硬到看起來像壞掉。
+        hp=3, speed=25.0, radius=14.0, sugar=3,
         knockable=False,
         traits=("armoured",),
-        params={"armour": 3},
+        params={"armour": 2},
         colour=(112, 120, 132), silhouette="brute",
         step_hz=140.0),
 
@@ -197,7 +203,7 @@ ENDLESS_POOL: Final[tuple[tuple[str, float], ...]] = (
     ("villager", 5.0), ("child", 3.0), ("brute", 2.0),
     ("splitter", 1.6), ("mirror", 1.4), ("bomber", 1.3),
     ("archer", 1.2), ("mudling", 1.2), ("faint", 1.0),
-    ("digger", 1.0), ("riser", 0.9), ("slinger", 0.8), ("armoured", 0.7),
+    ("digger", 1.0), ("slinger", 0.8), ("armoured", 0.7),
 )
 
 #: Elites are ordinary monsters with boosted numbers.
@@ -219,7 +225,6 @@ COUNTERS: Final[dict[str, str]] = {
     "faint": "聖光　不只現形，會被定在原地",
     "digger": "龍捲風　鑽到地底也會被吸出來",
     "bomber": "水牢／怒潮　火藥泡濕就炸不了",
-    "riser": "疾風　捲到場邊，爬起來也要走很久",
     "splitter": "任何清場技　小的會補在原地，別在她旁邊打",
     "brute": "打不退，只能繞開或用旋風捲走",
     "mudling": "泥巴清不掉，只能繞",
