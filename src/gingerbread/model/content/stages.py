@@ -54,7 +54,7 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     4: StageSpec(
         night=4, map_key="market",
-        recipe=("faint", "digger", "bomber", "villager", "armoured",
+        recipe=("faint", "bomber", "villager", "armoured",
                 "child", "mudling", "brute"),
         surges=(12.0, 26.0, 40.0),
         boss="mist_reaper", elites=2,
@@ -70,7 +70,7 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     6: StageSpec(
         night=6, map_key="butchery",
-        recipe=("armoured", "brute", "bomber", "digger",
+        recipe=("armoured", "brute", "bomber",
                 "armoured", "child", "mirror", "villager", "brute"),
         surges=(10.0, 20.0, 32.0, 44.0),
         boss="moonfall", elites=3,
@@ -78,8 +78,7 @@ STAGES: Final[dict[int, StageSpec]] = {
 
     7: StageSpec(
         night=7, map_key="deep_forest",
-        recipe=("brute", "faint", "armoured", "bomber",
-                "digger", "archer", "splitter", "mudling", "child"),
+        recipe=("brute", "faint", "armoured", "bomber", "archer", "splitter", "mudling", "child"),
         surges=(8.0, 18.0, 28.0, 38.0, 48.0),
         boss="witch", elites=3,
         tagline="所有身影融合成同一個存在。"),

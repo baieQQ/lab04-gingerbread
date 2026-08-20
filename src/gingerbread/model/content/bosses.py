@@ -42,7 +42,7 @@ BOSSES: Final[dict[str, BossSpec]] = {
         # mechanic, it is decoration.
         params={"mud_every": 0.34, "mud_radius": 46.0,
                 "mud_slow": 0.42, "mud_life": 13.0,
-                "bud_into": "slimeling", "bud_every": 1.4,
+                "bud_into": "child", "bud_every": 1.4,
                 "bud_cap": 7, "bud_delay": 0.35},
         colour=(196, 108, 172),
         phases=(
@@ -97,7 +97,7 @@ BOSSES: Final[dict[str, BossSpec]] = {
                       summons=(("faint", 6.0),),
                       announce="它停下來，霧就湧上來——霧裡唯一亮著的就是它。"),
             BossPhase(until_hp=0.0, behaviour="charge",
-                      summons=(("faint", 4.0), ("digger", 7.0)),
+                      summons=(("faint", 4.0), ("bomber", 7.0)),
                       announce="它放得更勤了。要嘛救妹妹，要嘛去把它打斷。"),
         )),
 
@@ -130,9 +130,15 @@ BOSSES: Final[dict[str, BossSpec]] = {
         hp=70, speed=32.0, radius=26.0, sugar=26,
         weakness="water",
         traits=("calls_meteors",),
+        # 爆炸半徑 44 → 100，散開 52 → 120。
+        #
+        # 44 的時候「把它引進自己的彈幕」在幾何上做不到：那個圈比法師本人大不
+        # 了多少，玩家要把它精確地騙到落點正中央才碰得到。整場戰鬥的解法寫在
+        # 台詞裡，而數字讓那個解法不存在。放大之後只要它靠近你，你閃開就會
+        # 掃到它。
         params={"meteor_every": 5.5, "meteor_min": 1, "meteor_max": 5,
-                "meteor_fall": 1.15, "meteor_radius": 44.0,
-                "meteor_spread": 52.0, "meteor_damage": 3},
+                "meteor_fall": 1.25, "meteor_radius": 100.0,
+                "meteor_spread": 120.0, "meteor_damage": 3},
         colour=(146, 118, 206),
         # It keeps its distance and does nothing at range but call rocks.  The
         # old build gave it ``standoff`` with arrows, which made the sixth-night
@@ -164,18 +170,24 @@ BOSSES: Final[dict[str, BossSpec]] = {
         # mechanics at their own tempos is not five times as interesting, it is
         # noise — she should feel like she is choosing, not like the field is
         # malfunctioning.
+        # 六種能力全部留著，但每一種的**頻率**都往下砍三到五成。
+        #
+        # 她的難度不是來自任何單一招式，是來自六個計時器同時在跑 —— 玩家永遠
+        # 在處理上一件事的時候被下一件打斷，沒有一秒是屬於他的。放慢每一個
+        # 計時器，六種招式還是都會出現（那是這一夜的重點：她就是前面所有東
+        # 西），但它們之間有了空隙，而空隙就是玩家的回合。
         params={"fade": 0.7,
-                "blink_every": 5.2, "blink_ring": 230.0,
-                "blink_daze": 1.0, "blink_ready": 1.2,
-                "bud_into": "child", "bud_every": 3.2,
-                "bud_cap": 6, "bud_delay": 0.35,
-                "fire_every": 4.4, "fire_speed": 145.0,
-                "fire_life": 4.0, "fire_spread": 0.4,
-                "meteor_every": 9.0, "meteor_min": 1, "meteor_max": 3,
-                "meteor_fall": 1.3, "meteor_radius": 42.0,
-                "meteor_spread": 56.0, "meteor_damage": 3,
-                "shroud_every": 22.0, "shroud_hold": 9.0,
-                "shroud_fog": 0.2, "shroud_cut": 3.0},
+                "blink_every": 8.0, "blink_ring": 230.0,
+                "blink_daze": 1.4, "blink_ready": 1.6,
+                "bud_into": "child", "bud_every": 5.0,
+                "bud_cap": 4, "bud_delay": 0.35,
+                "fire_every": 6.6, "fire_speed": 130.0,
+                "fire_life": 3.2, "fire_spread": 0.4,
+                "meteor_every": 14.0, "meteor_min": 1, "meteor_max": 2,
+                "meteor_fall": 1.5, "meteor_radius": 78.0,
+                "meteor_spread": 90.0, "meteor_damage": 2,
+                "shroud_every": 32.0, "shroud_hold": 6.0,
+                "shroud_fog": 0.3, "shroud_cut": 2.5},
         entrance=28.0,
         colour=(150, 62, 120),
         phases=(

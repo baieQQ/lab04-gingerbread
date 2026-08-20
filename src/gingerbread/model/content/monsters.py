@@ -202,8 +202,7 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
 ENDLESS_POOL: Final[tuple[tuple[str, float], ...]] = (
     ("villager", 5.0), ("child", 3.0), ("brute", 2.0),
     ("splitter", 1.6), ("mirror", 1.4), ("bomber", 1.3),
-    ("archer", 1.2), ("mudling", 1.2), ("faint", 1.0),
-    ("digger", 1.0), ("slinger", 0.8), ("armoured", 0.7),
+    ("archer", 1.2), ("mudling", 1.2), ("faint", 1.0), ("slinger", 0.8), ("armoured", 0.7),
 )
 
 #: Elites are ordinary monsters with boosted numbers.
@@ -223,7 +222,6 @@ COUNTERS: Final[dict[str, str]] = {
     "armoured": "閃電　護甲會被劈碎",
     "mirror": "聖光　照著的時候正面也打得進去",
     "faint": "聖光　不只現形，會被定在原地",
-    "digger": "龍捲風　鑽到地底也會被吸出來",
     "bomber": "水牢／怒潮　火藥泡濕就炸不了",
     "splitter": "任何清場技　小的會補在原地，別在她旁邊打",
     "brute": "打不退，只能繞開或用旋風捲走",
