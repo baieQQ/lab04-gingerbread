@@ -110,7 +110,8 @@ BOSSES: Final[dict[str, BossSpec]] = {
         weakness="water",
         traits=("hurls_fire", "needs_soak"),
         params={"fire_every": 2.6, "fire_speed": 150.0,
-                "fire_life": 5.0, "fire_spread": 0.35},
+                "fire_life": 5.0, "fire_spread": 0.35,
+                "cool_after": 13.0, "cool_window": 2.2},
         colour=(214, 96, 44),
         phases=(
             BossPhase(until_hp=0.55, behaviour="flank",

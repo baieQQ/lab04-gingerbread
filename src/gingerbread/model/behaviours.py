@@ -897,7 +897,10 @@ def reflects(state: State, monster: Monster, payload: float = 0.0) -> None:
 
 
 @trait("needs_soak", "spawn", label="燒紅",
-       note="燒得通紅，打上去只有火星；被水屬性技能澆到才會露出破綻")
+       note="燒得通紅，打上去只有火星；被水屬性技能澆到才會露出破綻。"
+            "沒帶水的話，它自己也會燒累，隔一陣子喘一次",
+       params={"cool_after": (13.0, "沒被澆到的話，多久自己喘一次"),
+               "cool_window": (2.2, "自己喘的時候露出破綻幾秒")})
 def needs_soak(state: State, monster: Monster, payload: float = 0.0) -> None:
     """Marker only — the gate itself lives in ``rules.damage_target``.
 
@@ -907,6 +910,42 @@ def needs_soak(state: State, monster: Monster, payload: float = 0.0) -> None:
     puts it in the codex and what lets the content validator accept it.
     """
     return
+
+
+@trait("needs_soak", "tick", label="燒紅",
+       note="燒得通紅，打上去只有火星；被水屬性技能澆到才會露出破綻。"
+            "沒帶水的話，它自己也會燒累，隔一陣子喘一次")
+def needs_soak_tick(state: State, monster: Monster, payload: float = 0.0) -> None:
+    """Let a sealed boss cool off on its own if nobody puts it out.
+
+    Without this the fifth night is a dead end, not a hard fight.  Dawn on a
+    boss night requires the boss to be *down*, and the gate only opens to a
+    water skill — so a player who walked in carrying 閃電 and 雷鳴 could not
+    end the night at all.  Not lose it: not end it.  They would stand in a
+    field they had already cleared, swinging at something nothing they owned
+    could touch, until they closed the game.
+
+    A design that punishes the wrong loadout with a loss is fair.  One that
+    punishes it with a softlock is broken, and no amount of signposting in the
+    shop fixes it — the player who most needs the warning is the one who has
+    not yet learned to read it.
+
+    So it breathes.  Water is still the answer, by a wide margin: instant,
+    on demand, and a longer window.  Bringing none of it means the fight
+    happens at the hob's tempo instead of the player's, which is a *worse*
+    fight rather than an impossible one.
+    """
+    spec = _spec(monster)
+    if monster.memory.get("exposed", 0.0) > 0:
+        monster.memory["dry"] = 0.0
+        return
+    monster.memory["dry"] = monster.memory.get("dry", 0.0) + C.FIXED_DT
+    if monster.memory["dry"] < param(spec, "needs_soak", "cool_after"):
+        return
+    monster.memory["dry"] = 0.0
+    monster.memory["exposed"] = param(spec, "needs_soak", "cool_window")
+    state.effects.append(Effect("exposed", monster.x, monster.y, 0.5, 0.5))
+    state.emit(f"cooled:{spec.key}")
 
 
 @trait("elite_aura", "spawn", label="精英", note="體型與數值都被強化過")
