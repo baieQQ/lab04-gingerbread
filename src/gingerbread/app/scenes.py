@@ -1803,7 +1803,18 @@ class CodexScene(Scene):
             self.scroll = max(0, self.scroll - 1)
 
         y = 120
-        for title, stats, note in rows[self.scroll:self.scroll + self.PER_PAGE]:
+        for row in rows[self.scroll:self.scroll + self.PER_PAGE]:
+            title, stats, note = row[:3]
+            art_key = row[3] if len(row) > 3 else None
+            # The picture, where there is one.  A bestiary of names and numbers
+            # asks the player to hold a mental image the game has already drawn
+            # for them; this is the one screen where they can look at the thing
+            # itself instead of trying to remember it.
+            if art_key:
+                art = self.g.assets.fitted(art_key, ui.s(46))
+                if art is not None:
+                    ui.surface.blit(art, art.get_rect(
+                        midleft=(ui.s(MID - 382), ui.s(y + 12))))
             ui.text(title, (ui.s(MID - 320), ui.s(y)), "body", P.BONE)
             ui.text(stats, (ui.s(MID - 150), ui.s(y + 2)), "small", P.BONE_DIM)
             if note:
@@ -1838,13 +1849,15 @@ class CodexScene(Scene):
         stats = (f"血 {spec.hp}　速 {spec.speed:.0f}　糖霜 {spec.sugar}"
                  + ("　打不退" if not spec.knockable else "")
                  + (f"　弱點 {weak}" if weak else ""))
-        return (spec.name, stats, self._mechanics(spec))
+        return (spec.name, stats, self._mechanics(spec),
+                f"monster.{spec.key}")
 
     def _boss_row(self, spec) -> tuple[str, str, str]:
         weak = ELEMENTS.get(spec.weakness or "", {}).get("name", "沒有單一解答")
         stats = f"{spec.title}　血 {spec.hp}　弱點 {weak}　{len(spec.phases)} 階段"
         return (spec.name, stats,
-                spec.phases[0].announce or self._mechanics(spec))
+                spec.phases[0].announce or self._mechanics(spec),
+                f"monster.{spec.key}")
 
     def _skill_row(self, spec) -> tuple[str, str, str]:
         element = ELEMENTS.get(spec.element, {}).get("name", "")
