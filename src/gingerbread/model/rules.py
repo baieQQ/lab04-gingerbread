@@ -590,8 +590,20 @@ def _advance_monsters(state: State, dt: float) -> None:
         elif not monster.frozen:
             run_behaviour(spec.behaviour, state, monster, dt)
 
-        if _touch_player(state, monster, spec):
-            pass                      # contact resolved; the monster survives
+        _touch_player(state, monster, spec)
+
+        # 接觸有可能當場把它殺掉 —— 雷鳴就是「碰到就死」。
+        #
+        # 而 ``_kill`` 是從 ``state.monsters`` 上把它拿掉的，這個迴圈最後卻會
+        # 用 ``survivors`` 整個覆蓋回去，所以那個移除被抹掉了：屍體留在場上，
+        # 下一格再被電一次，再死一次。
+        #
+        # 一秒六十次「再死一次」的後果不只是難看：自爆怪每一格炸一次、分裂怪
+        # 每一格生兩隻（量出來九格生了十八隻）、糖霜每一格掉一份、擊殺數每一
+        # 格加一。原本這裡寫著「contact resolved; the monster survives」——
+        # 那句話在接觸還不會殺人的時候是對的。
+        if monster.hp <= 0:
+            continue
 
         # 正在被擊退的身體不算「走到葛蕾特身上」。
         #
@@ -601,8 +613,13 @@ def _advance_monsters(state: State, dt: float) -> None:
         if (monster.knockback <= 0
                 and g.distance(monster.x, monster.y,
                                C.SISTER_X, C.SISTER_Y) < C.SISTER_REACH):
-            _reach_sister(state, monster, spec)
-            continue
+            # 被護罩彈開的不算「到過她身上」，所以不能把它從場上拿掉。
+            #
+            # 原本這裡不看回傳值就 continue —— 於是聖癒不是護罩，是一個八秒
+            # 的清場區：任何碰到護罩的東西直接從場上消失。那比它該有的樣子強
+            # 太多，也不是它文案上說的那件事（「撞上去的還會被彈開」）。
+            if _reach_sister(state, monster, spec):
+                continue
 
         survivors.append(monster)
 
@@ -772,10 +789,15 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
     return True
 
 
-def _reach_sister(state: State, monster: Monster, spec) -> None:
-    """A monster got to Gretel.  This is the only way the run can be lost."""
+def _reach_sister(state: State, monster: Monster, spec) -> bool:
+    """A monster got to Gretel.  This is the only way the run can be lost.
+
+    回傳「它真的碰到她了」。被聖癒的護罩彈開的那些回傳 False —— 它們還活著、
+    還在場上，只是被扔了出去。呼叫的那一邊要照這個回傳值決定要不要把它從場
+    上拿掉。
+    """
     if _warded(state, monster):
-        return
+        return False
     damage = getattr(spec, "contact_damage", 1)
     if not state.meta.godmode:
         state.meta.sister_hp = max(0, state.meta.sister_hp - damage)
@@ -784,6 +806,7 @@ def _reach_sister(state: State, monster: Monster, spec) -> None:
     state.effects.append(Effect("taken", C.SISTER_X, C.SISTER_Y, 0.6, 0.6))
     fire_traits("reach_sister", getattr(spec, "traits", ()), state, monster)
     state.emit("reached")
+    return True
 
 
 # ── bosses ───────────────────────────────────────────────────────────

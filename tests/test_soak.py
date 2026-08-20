@@ -99,3 +99,45 @@ def test_a_thousand_frames_of_menus_do_not_blow_the_fuse():
         _play(game, 200)
         game.stack.pop()
     assert game._crash_count == 0, game._last_crash
+
+
+def test_toggling_fullscreen_keeps_everything_drawable():
+    """切換全螢幕會重建畫布、重建字型、重建 Board。
+
+    這條路上每一個持有舊尺寸的東西都得換掉，漏一個就是「切回來之後字全部糊
+    掉」或「按鈕的位置跟游標對不上」。
+    """
+    game = _boot()
+    from gingerbread.app import scenes as S
+
+    game.stack.push(S.CodexScene(game.session))
+    _play(game, 20)
+    for _ in range(3):
+        game.toggle_fullscreen()
+        _play(game, 20)
+        assert game.ui.scale > 0
+        assert game.book is game.session.book
+        assert game.stack.ui is game.ui
+        # 字還畫得出來，而且是照新的尺寸畫的。
+        surface = game.book.render("撐過了第 3 夜", "body", (240, 229, 205))
+        assert surface.get_width() > 10
+    assert game._crash_count == 0, game._last_crash
+
+
+def test_a_night_played_with_the_lantern_only_still_ends():
+    """完全不放技能、只揮燈，也要走得完一夜（不管是天亮還是輸掉）。"""
+    game = _boot()
+    game.session.start(m.Mode.CAMPAIGN)
+    game.stack.push(PlayScene(game.session))
+    game.session.act("learn:bolt")
+    game.session.act("learn:thunderclap")
+    game.session.act("slot:0:bolt")
+    game.session.act("slot:1:thunderclap")
+    game.session.act("begin_night")
+    game.session.story_shown = 99
+    for _ in range(200):
+        _play(game, 30)
+        if game.session.state.phase is not m.Phase.NIGHT:
+            break
+    assert game.session.state.phase is not m.Phase.NIGHT, "一夜跑不完"
+    assert game._crash_count == 0, game._last_crash

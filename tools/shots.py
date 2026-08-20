@@ -108,6 +108,26 @@ def main(out: Path) -> int:
         shoot(g, out / f"{name}.png")
         g.stack.pop()
 
+    # ── 操作導覽、練習場 ─────────────────────────────────────────
+    g.stack.push(S.TutorialScene(g.session, m.Mode.CAMPAIGN))
+    run(g, 20)
+    shoot(g, out / "16-操作導覽.png")
+    g.stack.pop()
+    g.stack.push(S.PracticeScene(g.session, ("mirror",)))
+    run(g, 90)
+    shoot(g, out / "17-練習場.png")
+    while not isinstance(g.stack.top, S.MenuScene) and len(g.stack.scenes) > 1:
+        g.stack.pop()
+
+    # ── 圖鑑的另外兩頁 ───────────────────────────────────────────
+    for page, label in ((1, "18-圖鑑-頭目"), (2, "19-圖鑑-技能")):
+        codex = S.CodexScene(g.session)
+        codex.page = page
+        g.stack.push(codex)
+        run(g, 8)
+        shoot(g, out / f"{label}.png")
+        g.stack.pop()
+
     # ── 白天商店、選技能 ─────────────────────────────────────────
     # 白天一進去會自動疊上劇情卡和地圖，把它們收掉才看得到商店本身。
     g.session.start(m.Mode.CAMPAIGN)
