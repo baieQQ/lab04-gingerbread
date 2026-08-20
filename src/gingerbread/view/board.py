@@ -249,10 +249,19 @@ class Board:
     def _draw_obstacles(self, state: State) -> None:
         for block in state.obstacles:
             pos = (int(block.x), int(block.y))
-            pygame.draw.circle(self.surface, (14, 12, 22), pos, int(block.radius))
-            pygame.draw.circle(self.surface, P.mix(P.INK, P.PANEL_HI, 0.5),
-                               pos, int(block.radius), 3)
-            pygame.draw.circle(self.surface, F.OUTLINE, pos, int(block.radius), 1)
+            # 石頭要看起來是凸出來的，不是凹下去的。
+            #
+            # 原本是一個幾乎純黑的圓，畫在同樣很暗的林地上，讀起來是「地上有
+            # 一個洞」—— 而這款遊戲裡真的有會挖洞的東西，所以那是最糟的一種
+            # 誤讀。改成一顆有受光面的灰石頭：亮的那半在左上，跟提燈的方向無
+            # 關但跟所有立繪一致。
+            radius = int(block.radius)
+            pygame.draw.circle(self.surface, P.mix(P.INK, P.BONE_DIM, 0.26),
+                               pos, radius)
+            pygame.draw.circle(self.surface, P.mix(P.INK, P.BONE_DIM, 0.44),
+                               (pos[0] - radius // 4, pos[1] - radius // 3),
+                               max(2, radius * 2 // 3))
+            pygame.draw.circle(self.surface, F.OUTLINE, pos, radius, 1)
             if block.life <= 0:
                 continue
             # A dropped rock is temporary and has to say so, or the player plans

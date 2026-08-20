@@ -112,22 +112,6 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         colour=(176, 64, 88), silhouette="villager",
         step_hz=440.0),
 
-    "digger": MonsterSpec(
-        key="digger", name="挖洞怪",
-        hp=3, speed=40.0, radius=11.0, sugar=2,
-        behaviour="burrow",
-        params={"dig_after": 1.5, "surface_at": 92.0},
-        colour=(120, 96, 62), silhouette="villager",
-        step_hz=240.0),
-
-    # ── 6｜復活怪 ───────────────────────────────────────────────────
-    "riser": MonsterSpec(
-        key="riser", name="復活怪",
-        hp=4, speed=31.0, radius=11.0, sugar=3,
-        traits=("revives",),
-        params={"revive_hp": 0.6, "revive_delay": 1.6},
-        colour=(108, 74, 118), silhouette="villager",
-        step_hz=350.0),
 
     # ── 7｜隱形怪 ───────────────────────────────────────────────────
     "faint": MonsterSpec(
@@ -170,19 +154,6 @@ MONSTERS: Final[dict[str, MonsterSpec]] = {
         colour=(104, 84, 56), silhouette="villager",
         step_hz=200.0),
 
-    # ── 小史萊姆 · 只有糖果史萊姆會生出來，不進一般生怪池 ──────────
-    "slimeling": MonsterSpec(
-        key="slimeling", name="小史萊姆",
-        hp=2, speed=30.0, radius=9.0, sugar=1,
-        traits=("mud_trail",),
-        # A short, thin trail: the boss owns the wide sticky one, and eight
-        # children each laying a boss-sized puddle would carpet the map inside
-        # ten seconds and turn the fight into a slideshow.
-        params={"mud_every": 0.6, "mud_radius": 20.0,
-                "mud_slow": 0.7, "mud_life": 4.0},
-        weakness="thunder",
-        colour=(196, 108, 172), silhouette="villager",
-        step_hz=300.0),
 
     # ── 10｜自爆怪 ──────────────────────────────────────────────────
     "bomber": MonsterSpec(

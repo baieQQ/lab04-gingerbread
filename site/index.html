@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>糖果屋之後 · After the Gingerbread House</title>
+<meta name="description" content="七個夜晚，一盞提燈，一個必須被守住的人。">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+:root {
+  --void:#06050b; --ink:#0d0b15; --panel:#15121f; --panel-hi:#1e1a2c;
+  --line:#241e36; --bone:#f0e5cd; --dim:#b8a98b; --muted:#6a6383;
+  --ember:#f2a93b; --ember-dark:#a86b1f; --blood:#c03a2e; --arcane:#8e6bd6;
+  --sugar:#d68a54;
+}
+html { scroll-behavior:smooth; }
+body {
+  margin:0; background:var(--void); color:var(--bone);
+  font-family:"PingFang TC","Hiragino Sans GB","Microsoft JhengHei",
+              "Noto Sans TC",system-ui,sans-serif;
+  line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+img, video { max-width:100%; display:block; }
+img[src*="/monster/"], img[src*="/char/"], img[src*="/icon/"] {
+  image-rendering:pixelated;
+}
+section { max-width:1080px; margin:0 auto; padding:5rem 1.5rem; }
+h1,h2,h3,h4 { line-height:1.3; margin:0 0 .6rem; font-weight:600; }
+h2 { font-size:clamp(1.5rem,3.4vw,2.1rem); color:var(--ember);
+     letter-spacing:.04em; }
+h2::after { content:""; display:block; width:3rem; height:2px;
+            background:var(--ember-dark); margin-top:.9rem; }
+p { margin:0 0 .8rem; }
+.sub { color:var(--dim); max-width:60ch; margin-bottom:2.4rem; }
+.stat { color:var(--muted); font-size:.86rem; letter-spacing:.03em; }
+.card-tag { color:var(--arcane); font-size:.8rem; letter-spacing:.14em;
+            margin-bottom:.3rem; }
+
+/* hero */
+.hero { position:relative; min-height:min(88vh,760px); display:flex;
+        align-items:flex-end; overflow:hidden; }
+.hero-art { position:absolute; inset:0; width:100%; height:100%;
+            object-fit:cover; opacity:.5; }
+.hero::after { content:""; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(6,5,11,.55) 0%,
+             rgba(6,5,11,.2) 35%,var(--void) 100%); }
+.hero-text { position:relative; z-index:1; max-width:1080px; width:100%;
+             margin:0 auto; padding:0 1.5rem 5rem; }
+.kicker { color:var(--muted); letter-spacing:.2em; font-size:.78rem; }
+.hero h1 { font-size:clamp(2.6rem,8vw,5rem); color:var(--ember);
+           letter-spacing:.1em; margin:.2rem 0 .4rem;
+           text-shadow:0 0 40px rgba(242,169,59,.28); }
+.tagline { font-size:clamp(1rem,2.4vw,1.3rem); color:var(--bone);
+           letter-spacing:.06em; }
+.lede { color:var(--dim); margin-top:1.4rem; }
+.pills { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1.8rem; }
+.pills span { border:1px solid var(--line); background:rgba(21,18,31,.8);
+  padding:.34rem .9rem; border-radius:999px; font-size:.82rem;
+  color:var(--dim); }
+
+/* grids */
+.grid { display:grid; gap:1.2rem; }
+.two { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+.three { grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+.nights-grid { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); }
+.beasts-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
+
+.card, .night, .skill, .beast, .clip figcaption {
+  background:var(--panel); border:1px solid var(--line); border-radius:10px;
+}
+.card { padding:1.6rem 1.4rem; }
+.card h3 { color:var(--bone); }
+.card p:last-child { color:var(--dim); margin:0; }
+
+/* clips */
+.clips figure { margin:0; }
+.clip video { border:1px solid var(--line); border-radius:10px 10px 0 0;
+              background:#000; }
+.clip figcaption { border-top:0; border-radius:0 0 10px 10px;
+  padding:1rem 1.1rem; color:var(--dim); font-size:.88rem; }
+.clip figcaption strong { display:block; color:var(--bone);
+  font-weight:600; margin-bottom:.25rem; }
+
+/* nights */
+.night { display:flex; gap:1rem; padding:1.2rem; align-items:flex-start; }
+.night-art { flex:0 0 84px; height:84px; display:flex; align-items:center;
+  justify-content:center; background:var(--ink); border-radius:8px;
+  border:1px solid var(--line); }
+.night-art img { max-height:72px; width:auto; }
+.night-body h3 { color:var(--ember); font-size:1.05rem; }
+.night-body p { margin:0 0 .4rem; color:var(--dim); font-size:.9rem; }
+
+/* skills */
+.skill { display:flex; gap:1rem; padding:1.2rem; align-items:flex-start; }
+.skill img { flex:0 0 54px; width:54px; border-radius:8px;
+  background:var(--ink); border:1px solid var(--line); padding:4px; }
+.skill h3 { color:var(--bone); font-size:1rem; display:flex; gap:.6rem;
+  align-items:baseline; }
+.tier { font-size:.72rem; color:var(--arcane); border:1px solid var(--line);
+  border-radius:4px; padding:.05rem .45rem; }
+.skill p:last-child { margin:.45rem 0 0; color:var(--dim); font-size:.88rem; }
+
+/* beasts */
+.beast { padding:1rem .8rem; text-align:center; }
+.beast img, .beast .no-art { height:56px; width:auto; margin:0 auto .6rem; }
+.beast .no-art { display:block; width:34px; border-radius:50%;
+  background:var(--panel-hi); border:1px solid var(--line); }
+.beast h4 { font-size:.92rem; margin-bottom:.2rem; }
+.counter { color:var(--sugar); font-size:.76rem; margin:.35rem 0 0; }
+
+/* shots */
+.shots figure { margin:0; }
+.shots img { border:1px solid var(--line); border-radius:10px; }
+.shots figcaption { color:var(--muted); font-size:.82rem; padding-top:.6rem; }
+
+/* how */
+.keys { display:grid; gap:.7rem;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-bottom:2rem; }
+.keys div { display:flex; gap:.8rem; align-items:center; }
+kbd { background:var(--panel-hi); border:1px solid var(--line);
+  border-bottom-width:2px; border-radius:6px; padding:.2rem .6rem;
+  font-family:ui-monospace,Menlo,monospace; font-size:.8rem; color:var(--bone);
+  min-width:5.2rem; text-align:center; }
+.keys span { color:var(--dim); font-size:.9rem; }
+.run pre { background:var(--ink); border:1px solid var(--line);
+  border-radius:10px; padding:1.1rem 1.3rem; overflow-x:auto; }
+.run code { font-family:ui-monospace,Menlo,monospace; font-size:.85rem;
+  color:var(--dim); }
+.run p { color:var(--muted); font-size:.86rem; }
+
+/* credits */
+#credits { text-align:center; padding-bottom:7rem; }
+#credits h2::after { margin-left:auto; margin-right:auto; }
+.makers { display:flex; flex-wrap:wrap; gap:1rem; justify-content:center;
+  margin:2.4rem 0 2rem; }
+.maker { background:var(--panel); border:1px solid var(--line);
+  border-radius:10px; padding:1.1rem 2rem; min-width:190px; }
+.maker span { display:block; color:var(--muted); font-size:.76rem;
+  letter-spacing:.14em; margin-bottom:.3rem; }
+.maker strong { font-size:1.15rem; font-weight:600; letter-spacing:.08em; }
+.closing { color:var(--muted); font-size:.9rem; }
+
+@media (max-width:600px) {
+  section { padding:3.5rem 1.2rem; }
+  .hero-text { padding-bottom:3rem; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <img class="hero-art" src="media/art/title/menu.webp" alt="">
+  <div class="hero-text">
+    <p class="kicker">成功大學　Python 課程專題</p>
+    <h1>糖果屋之後</h1>
+    <p class="tagline">這一次，換他來保護妹妹。</p>
+    <p class="lede">
+      兄妹倆從女巫的屋子回來了，帶著一整袋糖。<br>
+      村子餓了一整個冬天，而現在他們手上有東西。<br>
+      七個夜晚之後，來敲門的已經不是人了。
+    </p>
+    <div class="pills">
+      <span>七個夜晚</span><span>六隻頭目</span>
+      <span>8 個技能</span><span>12 種怪物</span>
+    </div>
+  </div>
+</header>
+<section id="loop">
+  <h2>一天，一夜，再一天</h2>
+  <div class="grid three">
+      <article class="card">
+        <p class="card-tag">白天</p>
+        <h3>村子還是村子</h3>
+        <p>用昨晚撿到的糖霜換裝備、學技能，決定今晚帶哪兩個上場。一天只有這麼多資源，選了這個就沒有那個。</p>
+      </article>
+      <article class="card">
+        <p class="card-tag">夜晚</p>
+        <h3>提燈照到的地方才看得見</h3>
+        <p>守住葛蕾特 50 秒。她不會跑、不會躲，被碰到就掉血 —— 而她的血，天亮也不會自己補回來。</p>
+      </article>
+      <article class="card">
+        <p class="card-tag">天亮</p>
+        <h3>這一夜打得怎麼樣</h3>
+        <p>六項評分、一個等第、一到三顆星。打得不好可以重來，重來的成績只會往上不會往下。</p>
+      </article></div>
+</section>
+<section id="play">
+  <h2>玩起來是這樣</h2>
+  <p class="sub">下面三段都是遊戲實際跑出來的畫面，沒有剪接。</p>
+  <div class="grid three clips">
+      <figure class="clip">
+        <video src="media/夜晚.mp4" autoplay loop muted playsinline></video>
+        <figcaption><strong>第一夜</strong>提燈照到的地方才看得見。看不見的東西還是在走。</figcaption>
+      </figure>
+      <figure class="clip">
+        <video src="media/弓箭手之夜.mp4" autoplay loop muted playsinline></video>
+        <figcaption><strong>第三夜　褪影射手</strong>遠處那道光是它在拉弓。走過去打斷它，或是替葛蕾特擋下那一箭。</figcaption>
+      </figure>
+      <figure class="clip">
+        <video src="media/女巫之夜.mp4" autoplay loop muted playsinline></video>
+        <figcaption><strong>第七夜　糖果屋女巫</strong>前面六夜的每一種招式，她全部都有。</figcaption>
+      </figure></div>
+</section>
+<section id="nights">
+  <h2>七個夜晚</h2>
+  <p class="sub">每一夜換一張地圖、換一批怪；從第二夜起，每一夜有一隻頭目。</p>
+  <div class="grid nights-grid">
+      <article class="night">
+        <div class="night-art"><img src="media/art/char/hansel.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 1 夜　回來的那天</p>
+          <h3>沒有頭目</h3>
+          <p>你們帶著女巫屋子裡的東西回到村子。</p>
+          <p class="stat">村民熱烈迎接。有人好奇，有人議論。</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/slime.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 2 夜　他們靠得更近</p>
+          <h3>糖果史萊姆</h3>
+          <p>磨坊今天沒有轉。</p>
+          <p class="stat">血 46　弱點 雷</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/shade_archer.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 3 夜　不只是森林裡</p>
+          <h3>褪影射手</h3>
+          <p>你在林邊認出了三張臉——都是白天跟你借過火的人。</p>
+          <p class="stat">血 52　弱點 光</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/mist_reaper.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 4 夜　霧裡的那張臉</p>
+          <h3>迷霧死神</h3>
+          <p>市集空了。攤子還在，人不在。</p>
+          <p class="stat">血 58　弱點 風</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/ash_hob.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 5 夜　教堂燒起來了</p>
+          <h3>灰燼灶鬼</h3>
+          <p>有人先點的火。沒有人承認。</p>
+          <p class="stat">血 46　弱點 水</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/moonfall.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 6 夜　分不清在逃還是在追</p>
+          <h3>墜月法師</h3>
+          <p>村子燒了一整夜。</p>
+          <p class="stat">血 70　弱點 水</p>
+        </div>
+      </article>
+      <article class="night">
+        <div class="night-art"><img src="media/art/monster/witch.webp" alt=""></div>
+        <div class="night-body">
+          <p class="card-tag">第 7 夜　回到被丟掉的地方</p>
+          <h3>糖果屋女巫</h3>
+          <p>這條路你走過一次——那次是被人帶進來的。</p>
+          <p class="stat">血 92　弱點 沒有單一解答</p>
+        </div>
+      </article></div>
+</section>
+<section id="skills">
+  <h2>八個技能，四種元素</h2>
+  <p class="sub">雷破甲、光揭穿、風開路、水滅火。
+     帶錯元素打得動，帶對元素打得快 —— 而有一隻頭目，不帶水就真的碰不到它。</p>
+  <div class="grid two">
+      <article class="skill">
+        <img src="media/art/icon/bolt.webp" alt="">
+        <div>
+          <h3>閃電<span class="tier">1 階</span></h3>
+          <p class="stat">雷　冷卻 20 秒　瞬間</p>
+          <p>大範圍劈下閃電：護甲全碎、吃三點傷害，活下來的只剩一滴血；落點留下一片電焦的地面，走進去的只剩三成速度</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/holy.webp" alt="">
+        <div>
+          <h3>聖光<span class="tier">1 階</span></h3>
+          <p class="stat">光　冷卻 22 秒　持續 8 秒</p>
+          <p>八秒內照亮全場，隱形的現形，全場敵人畏光減速三成，周圍的敵人每秒被灼燒</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/tornado.webp" alt="">
+        <div>
+          <h3>龍捲風<span class="tier">1 階</span></h3>
+          <p class="stat">風　冷卻 16 秒　持續 5 秒</p>
+          <p>朝面對的方向放出三道呈扇形散開的龍捲風，捲起沿路的怪一起帶走</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/cage.webp" alt="">
+        <div>
+          <h3>水牢<span class="tier">1 階</span></h3>
+          <p class="stat">水　冷卻 18 秒　持續 5 秒</p>
+          <p>罩住腳下一片地方，裡面的敵人動不了；五秒後炸開，全部清空</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/thunderclap.webp" alt="">
+        <div>
+          <h3>雷鳴<span class="tier">2 階</span></h3>
+          <p class="stat">雷　冷卻 26 秒　持續 5 秒</p>
+          <p>披上雷電護甲五秒，碰到你的人當場被電死；五秒結束時把累積的電一次放掉，大範圍清空</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/blessing.webp" alt="">
+        <div>
+          <h3>聖癒<span class="tier">2 階</span></h3>
+          <p class="stat">光　冷卻 30 秒　持續 8 秒</p>
+          <p>八秒內在葛蕾特身上罩一層護罩，任何東西都碰不到她，撞上去的還會被彈開；期間每四秒替兄妹各回一滴血</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/windrun.webp" alt="">
+        <div>
+          <h3>疾風<span class="tier">2 階</span></h3>
+          <p class="stat">風　冷卻 24 秒　持續 6 秒</p>
+          <p>六秒內化成旋風，撞到的敵人會被捲著往你衝的方向飛到場邊；期間照樣可以揮燈</p>
+        </div>
+      </article>
+      <article class="skill">
+        <img src="media/art/icon/riptide.webp" alt="">
+        <div>
+          <h3>怒潮<span class="tier">2 階</span></h3>
+          <p class="stat">水　冷卻 28 秒　瞬間</p>
+          <p>三圈水波由內往外推開，掃過的全部清空；之後全場起霧，敵人走得更慢</p>
+        </div>
+      </article></div>
+</section>
+<section id="beasts">
+  <h2>來敲門的是誰</h2>
+  <p class="sub">12 種怪，每一種都有一個「這樣做就對了」的答案。
+     遊戲裡的圖鑑會直接告訴你那個答案 —— 難的從來不是知道，是做到。</p>
+  <div class="grid beasts-grid">
+      <article class="beast">
+        <img src="media/art/monster/villager.webp" alt="">
+        <h4>村民</h4>
+        <p class="stat">血 2　速 38</p>
+        
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/brute.webp" alt="">
+        <h4>壯漢</h4>
+        <p class="stat">血 5　速 29</p>
+        <p class="counter">剋星：打不退，只能繞開或用旋風捲走</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/child.webp" alt="">
+        <h4>孩子</h4>
+        <p class="stat">血 1　速 73</p>
+        
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/mirror.webp" alt="">
+        <h4>鏡子怪</h4>
+        <p class="stat">血 4　速 16</p>
+        <p class="counter">剋星：聖光　照著的時候正面也打得進去</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/archer.webp" alt="">
+        <h4>弓箭手</h4>
+        <p class="stat">血 2　速 30</p>
+        <p class="counter">剋星：走過去打斷它蓄力</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/slinger.webp" alt="">
+        <h4>投石怪</h4>
+        <p class="stat">血 3　速 26</p>
+        <p class="counter">剋星：走過去打斷它蓄力</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/splitter.webp" alt="">
+        <h4>分裂怪</h4>
+        <p class="stat">血 3　速 34</p>
+        <p class="counter">剋星：任何清場技　小的會補在原地，別在她旁邊打</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/splitterling.webp" alt="">
+        <h4>小分裂怪</h4>
+        <p class="stat">血 1　速 44</p>
+        
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/faint.webp" alt="">
+        <h4>隱形怪</h4>
+        <p class="stat">血 2　速 46</p>
+        <p class="counter">剋星：聖光　不只現形，會被定在原地</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/armoured.webp" alt="">
+        <h4>盔甲怪</h4>
+        <p class="stat">血 3　速 25</p>
+        <p class="counter">剋星：閃電　護甲會被劈碎</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/mudling.webp" alt="">
+        <h4>泥巴怪</h4>
+        <p class="stat">血 3　速 28</p>
+        <p class="counter">剋星：泥巴清不掉，只能繞</p>
+      </article>
+      <article class="beast">
+        <img src="media/art/monster/bomber.webp" alt="">
+        <h4>自爆怪</h4>
+        <p class="stat">血 2　速 52</p>
+        <p class="counter">剋星：水牢／怒潮　火藥泡濕就炸不了</p>
+      </article></div>
+</section>
+<section id="shots">
+  <h2>畫面</h2>
+  <div class="grid two shots">
+      <figure>
+        <img src="media/shots/04-主選單.webp" alt="主選單" loading="lazy">
+        <figcaption>主選單</figcaption>
+      </figure>
+      <figure>
+        <img src="media/shots/07-七夜地圖.webp" alt="七夜地圖" loading="lazy">
+        <figcaption>七夜地圖</figcaption>
+      </figure>
+      <figure>
+        <img src="media/shots/08-白天商店.webp" alt="白天：用糖霜換活下去的本錢" loading="lazy">
+        <figcaption>白天：用糖霜換活下去的本錢</figcaption>
+      </figure>
+      <figure>
+        <img src="media/shots/05-圖鑑.webp" alt="圖鑑：每一隻怪都寫得出剋星" loading="lazy">
+        <figcaption>圖鑑：每一隻怪都寫得出剋星</figcaption>
+      </figure>
+      <figure>
+        <img src="media/shots/12-天亮評分.webp" alt="天亮：這一夜打得怎麼樣" loading="lazy">
+        <figcaption>天亮：這一夜打得怎麼樣</figcaption>
+      </figure>
+      <figure>
+        <img src="media/shots/06-成績單.webp" alt="七夜之後的成績單" loading="lazy">
+        <figcaption>七夜之後的成績單</figcaption>
+      </figure></div>
+</section>
+<section id="how">
+  <h2>怎麼玩</h2>
+  <div class="keys"><div><kbd>WASD／方向鍵</kbd><span>走</span></div><div><kbd>J／空白</kbd><span>揮燈</span></div><div><kbd>K</kbd><span>防禦</span></div><div><kbd>Shift</kbd><span>衝刺</span></div><div><kbd>L</kbd><span>一階技能</span></div><div><kbd>；</kbd><span>二階技能</span></div><div><kbd>Esc</kbd><span>暫停</span></div><div><kbd>F11</kbd><span>全螢幕</span></div></div>
+  <div class="run">
+    <p>需要 Python 3.11 以上。</p>
+    <pre><code>python3.11 -m venv .venv
+.venv/bin/python -m pip install -e ".[test,display]"
+.venv/bin/python -m gingerbread</code></pre>
+  </div>
+</section>
+<section id="credits">
+  <h2>製作者</h2>
+  <div class="makers">
+      <div class="maker"><span>不分系</span><strong>曾哲瀚</strong></div>
+      <div class="maker"><span>工科所</span><strong>陳彥婷</strong></div>
+      <div class="maker"><span>工科所</span><strong>陳昱安</strong></div></div>
+  <p class="closing">兩個人在森林裡，一個提著燈。</p>
+</section>
+</body>
+</html>
