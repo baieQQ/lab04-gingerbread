@@ -19,6 +19,7 @@
 """
 
 import math
+import os
 import random
 import sys
 
@@ -76,7 +77,10 @@ def build_vignette():
     return vg
 
 pygame.init()
-screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
+# 有視窗就用現成的，沒有才開一個。
+# 這樣單獨執行（python story/xxx.py）跟被主程式 import 進去都成立 —— import
+# 的時候如果無條件 set_mode，會把主程式的視窗搶過來重設大小。
+screen = pygame.display.get_surface() or pygame.display.set_mode((WINDOW_W, WINDOW_H))
 pygame.display.set_caption("糖果屋之後｜序幕 - Prologue")
 canvas = pygame.Surface((INTERNAL_W, INTERNAL_H))
 glow_layer = pygame.Surface((INTERNAL_W, INTERNAL_H), pygame.SRCALPHA)
@@ -103,18 +107,45 @@ COL_BOOK_EDGE  = (220, 120, 50)
 random.seed(11)
 
 
+def _bundled_font_path():
+    """assets/GameCJK-Subset.ttf 的位置，找不到就回 None。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):
+        candidate = os.path.join(here, "assets", "GameCJK-Subset.ttf")
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return None
+
+
 def load_cjk_font(size, bold=False):
-    candidates = [
-        "Microsoft JhengHei", "Microsoft YaHei", "PMingLiU", "SimHei",
-        "Noto Sans CJK TC", "Noto Sans CJK SC", "Heiti TC", "Arial Unicode MS",
-    ]
-    for name in candidates:
+    """優先用遊戲自帶的字型，其次才找系統字型。
+
+    原本是直接 SysFont 掃一串候選名稱，第一個是 Microsoft JhengHei。問題是
+    **SysFont 找不到字型時不會回傳 None，它會靜默退回預設的拉丁字型** ——
+    所以在 Windows 以外的機器上，第一個候選就「成功」了，拿回來的字型一個
+    中文都畫不出來，整段字幕變成一排豆腐。
+
+    改成先用專案自帶的那份字型檔（跟遊戲本體同一份），換哪一台電腦都一樣。
+    真的找不到才回去掃系統字型，而且改用 match_font 驗證 —— 那個函式找不到
+    是真的回傳 None。
+    """
+    path = _bundled_font_path()
+    if path:
         try:
-            f = pygame.font.SysFont(name, size, bold=bold)
-            if f is not None:
-                return f
+            font = pygame.font.Font(path, size)
+            font.set_bold(bold)
+            return font
         except Exception:
-            continue
+            pass
+    for name in ("Heiti TC", "PingFang TC", "Noto Sans CJK TC",
+                 "Microsoft JhengHei", "Arial Unicode MS"):
+        found = pygame.font.match_font(name)
+        if found:
+            return pygame.font.Font(found, size)
     return pygame.font.Font(None, size)
 
 
@@ -551,6 +582,65 @@ def draw_end_card(surf):
     sub = hint_font.render("Day 1｜遊戲 即將開始", True, COL_BONE)
     surf.blit(sub, (WINDOW_W // 2 - sub.get_width() // 2, WINDOW_H // 2 + 10 * SCALE))
 
+
+
+
+# ------------------------------------------------------------------
+# 給主程式用的場景包裝
+#
+# 跟 main() 畫的是同一份東西，差別只在它不擁有視窗、不擁有主迴圈：
+# 由呼叫者餵 dt 和事件，畫到呼叫者給的 surface 上。這樣同一份動畫既能
+# 單獨執行，也能被 app/cutscene.py 接進遊戲流程裡。
+# ------------------------------------------------------------------
+class PrologueScene:
+    def __init__(self):
+        self.state = DialogueState()
+        self.t = 0.0
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.state.advance()
+        elif event.type == pygame.KEYDOWN and event.key in (
+                pygame.K_SPACE, pygame.K_RETURN):
+            self.state.advance()
+
+    def update(self, dt):
+        self.t += dt
+        self.state.update(dt)
+
+    def draw(self, screen):
+        bg_kind = ACTS[self.state.act_index]["bg"]
+        if bg_kind == "forest":
+            draw_forest_bg(canvas, self.t, dawn=False)
+        elif bg_kind == "forest_dawn":
+            draw_forest_bg(canvas, self.t, dawn=True)
+        elif bg_kind == "burning_house":
+            draw_burning_house(canvas, self.t, self.state.hansel_pose,
+                               self.state.gretel_pose, self.state.book_picked)
+            for e in EMBERS:
+                e.update(1.0 / FPS)
+                e.draw(canvas)
+
+
+        if self.state.finished:
+            draw_end_card(screen)
+            return
+
+        alpha = self.state.transition_alpha()
+        if alpha > 0:
+            veil = pygame.Surface((INTERNAL_W, INTERNAL_H))
+            veil.fill(COL_SILHOUETTE)
+            veil.set_alpha(alpha)
+            canvas.blit(veil, (0, 0))
+
+        canvas.blit(VIGNETTE, (0, 0))
+        scaled = pygame.transform.smoothscale(canvas, (WINDOW_W, SCENE_H_PX))
+        screen.blit(scaled, (0, 0))
+        draw_dialogue_box(screen, self.state)
+
+    @property
+    def finished(self):
+        return self.state.finished
 
 # ------------------------------------------------------------------
 # 主迴圈

@@ -96,6 +96,7 @@ class UI:
         self._wraps: dict[tuple, list[str]] = {}
         self._cuts: dict[tuple, str] = {}
         self.mouse = (-1, -1)
+        self.events: list[pygame.event.Event] = []
         #: Maps a window coordinate onto this surface.  The game renders to a
         #: fixed logical canvas and scales it to whatever the display is, so
         #: every incoming pointer position has to come back through the same
@@ -143,8 +144,12 @@ class UI:
         self.down = self.up = None
         self.activate = False
         self.keys = []
+        # 這一幀的原始事件，給需要自己解讀輸入的場景用 —— 過場動畫是組員寫
+        # 的，它有自己的 handle_event，餵它 pygame 事件比把它的輸入邏輯拆開
+        # 重寫誠實得多。
+        self.events = list(events)
         self._nav = 0
-        for e in events:
+        for e in self.events:
             if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
                 self.down, self.held = self.to_canvas(e.pos), True
             elif e.type == pygame.MOUSEBUTTONUP and e.button == 1:

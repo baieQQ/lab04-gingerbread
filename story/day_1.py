@@ -21,6 +21,7 @@
 """
 
 import math
+import os
 import random
 
 import pygame
@@ -101,18 +102,45 @@ COL_DAY_SILHOUETTE = (54, 40, 42)
 random.seed(21)
 
 
+def _bundled_font_path():
+    """assets/GameCJK-Subset.ttf 的位置，找不到就回 None。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):
+        candidate = os.path.join(here, "assets", "GameCJK-Subset.ttf")
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(here)
+        if parent == here:
+            break
+        here = parent
+    return None
+
+
 def load_cjk_font(size, bold=False):
-    candidates = [
-        "Microsoft JhengHei", "Microsoft YaHei", "PMingLiU", "SimHei",
-        "Noto Sans CJK TC", "Noto Sans CJK SC", "Heiti TC", "Arial Unicode MS",
-    ]
-    for name in candidates:
+    """優先用遊戲自帶的字型，其次才找系統字型。
+
+    原本是直接 SysFont 掃一串候選名稱，第一個是 Microsoft JhengHei。問題是
+    **SysFont 找不到字型時不會回傳 None，它會靜默退回預設的拉丁字型** ——
+    所以在 Windows 以外的機器上，第一個候選就「成功」了，拿回來的字型一個
+    中文都畫不出來，整段字幕變成一排豆腐。
+
+    改成先用專案自帶的那份字型檔（跟遊戲本體同一份），換哪一台電腦都一樣。
+    真的找不到才回去掃系統字型，而且改用 match_font 驗證 —— 那個函式找不到
+    是真的回傳 None。
+    """
+    path = _bundled_font_path()
+    if path:
         try:
-            f = pygame.font.SysFont(name, size, bold=bold)
-            if f is not None:
-                return f
+            font = pygame.font.Font(path, size)
+            font.set_bold(bold)
+            return font
         except Exception:
-            continue
+            pass
+    for name in ("Heiti TC", "PingFang TC", "Noto Sans CJK TC",
+                 "Microsoft JhengHei", "Arial Unicode MS"):
+        found = pygame.font.match_font(name)
+        if found:
+            return pygame.font.Font(found, size)
     return pygame.font.Font(None, size)
 
 
@@ -640,24 +668,22 @@ class PrologueScene:
     def draw(self, screen):
         bg_kind = ACTS[self.state.act_index]["bg"]
 
-        if bg_kind == "forest":
-            draw_forest_bg(canvas, self.t, dawn=False)
+        # 這裡原本判斷的是 intro 的三個背景（forest / burning_house），
+        # 但這一檔的 ACTS 是 crowd / training / witch_aunt —— 三個條件一個都
+        # 不會成立，所以整個場景是空的。改成對這一檔自己的三幕。
+        if bg_kind == "crowd":
+            # 村民的眼睛在這一幕中段才開始發光：一進場就發光的話，
+            # 「他們本來是正常人」這件事就沒有機會先成立。
+            glow = min(1.0, max(0.0, (self.state.act_timer - 2.0) / 3.0))
+            draw_crowd_scene(canvas, self.t, glow)
 
-        elif bg_kind == "forest_dawn":
-            draw_forest_bg(canvas, self.t, dawn=True)
+        elif bg_kind == "training":
+            draw_training_scene(canvas, self.t)
 
-        elif bg_kind == "burning_house":
-            draw_burning_house(
-                canvas,
-                self.t,
-                self.state.hansel_pose,
-                self.state.gretel_pose,
-                self.state.book_picked,
-            )
-
-            for e in EMBERS:
-                e.update(1 / FPS)
-                e.draw(canvas)
+        elif bg_kind == "witch_aunt":
+            # 老婦人從左側走進來，走三秒半到定位才遞出東西。
+            approach = min(1.0, self.state.act_timer / 3.5)
+            draw_witch_aunt_scene(canvas, self.t, approach)
 
         if self.state.finished:
             draw_end_card(screen)

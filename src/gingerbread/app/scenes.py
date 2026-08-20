@@ -31,6 +31,7 @@ from ..model.content.upgrades import SHOP_ORDER, UPGRADES
 from ..model.registry import describe_mechanic
 from ..view import palette as P
 from ..view.ui import Scene, SceneStack, Stack, UI
+from .cutscene import CUTSCENES, CutsceneScene
 
 #: Layout units.  The board sits between the HUD strip and the hint strip.
 #: The grade badge's colour.  S and A are the lantern's warm gold; D is the
@@ -68,8 +69,16 @@ class MenuScene(Scene):
             app.replace(TutorialScene(self.g, mode))
             return
         self.g.start(mode)
-        app.replace(PrologueScene(self.g) if mode is m.Mode.CAMPAIGN
-                    else PlayScene(self.g))
+        if mode is not m.Mode.CAMPAIGN:
+            app.replace(PlayScene(self.g))
+            return
+        # 序幕用組員做的那一段動畫，不是純字卡。他畫的那三幕講的就是文字版
+        # 講的那件事 —— 兩個都放等於同一段劇情連說兩次，而該退場的是文字。
+        # 動畫載不起來（缺檔、環境不對）才退回文字版，所以序幕永遠有東西。
+        app.replace(PlayScene(self.g))
+        opening = CutsceneScene(self.g, "intro")
+        app.push(opening if opening.inner is not None
+                 else PrologueScene(self.g))
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
         ui.veil(252)
@@ -711,13 +720,25 @@ class PlayScene(Scene):
         # they are walking back into.
         if state.phase is m.Phase.DAY and g.story_shown != state.meta.night:
             g.story_shown = state.meta.night
-            app.push(StoryScene(g))
+            # 有動畫的那幾天就播動畫，沒有的才退回文字卡 —— 同一段劇情不需要
+            # 講兩次，而動畫版是組員親手畫的。
+            cut = f"day_{state.meta.night}"
+            app.push(CutsceneScene(g, cut) if cut in CUTSCENES
+                     else StoryScene(g))
             # Pushed *after* the story card so it lands on top of it: the map
             # first — here is where you are, here is what is left — and the
             # night's own words underneath once the map is dismissed.  Endless
             # has no seven nights to draw, so it never sees this.
             if state.meta.mode is m.Mode.CAMPAIGN:
                 app.push(MapScene(g))
+            return
+
+        # 夜晚開場的動畫，每一夜只播一次。
+        night_cut = f"night_{state.meta.night}"
+        if (state.phase is m.Phase.NIGHT and night_cut in CUTSCENES
+                and night_cut not in g.cutscenes_played):
+            g.cutscenes_played.add(night_cut)
+            app.push(CutsceneScene(g, night_cut))
             return
 
         if state.phase is m.Phase.SHOP:

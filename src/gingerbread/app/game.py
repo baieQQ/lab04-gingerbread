@@ -75,6 +75,8 @@ class Session:
         #: Which night's opening card has already been shown, so it appears
         #: once per night and not once per frame.
         self.story_shown = 0
+        #: 已經播過的夜晚過場，避免重打同一夜時又看一次三分鐘的動畫。
+        self.cutscenes_played: set[str] = set()
         #: Events heard since the shell last drained them.  ``apply_action``
         #: clears ``state.events`` every tick and a frame can run five ticks, so
         #: anything that only read the newest state would hear one tick in five.

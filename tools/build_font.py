@@ -118,7 +118,9 @@ def pick_source_font() -> str:
 
 
 def main() -> int:
-    wanted = collect_from_source(ROOT / "src")
+    # story/ 也要掃：過場動畫的字幕是另一位組員寫的，那些字不在 src/ 裡，
+    # 漏掉的話字型子集就缺字，他的字幕會整排變成豆腐。
+    wanted = collect_from_source(ROOT / "src") | collect_from_source(ROOT / "story")
     wanted |= collect_from_source(ROOT / "tools")
     wanted |= set(ALWAYS) | set(SAFETY_NET)
 
