@@ -86,31 +86,6 @@ class MenuScene(Scene):
         ui.text("這一次，換他來保護妹妹。",
                 (ui.s(MID), ui.s(142)), "body", P.BONE_DIM, "center")
 
-    def _backdrop(self, ui: UI) -> None:
-        """主視覺鋪滿，字壓在上面；沒有圖就退回原本的純色。
-
-        照 cover 的方式裁切而不是拉伸 —— 主視覺的構圖是刻意的（提燈在左下、
-        糖果屋在右上），拉扁它等於把那個構圖丟掉。
-        """
-        art = self.g.assets.image("title.menu")
-        if art is None:
-            ui.veil(252)
-            return
-        target = ui.surface.get_size()
-        aw, ah = art.get_size()
-        k = max(target[0] / aw, target[1] / ah)
-        size = (max(1, int(aw * k)), max(1, int(ah * k)))
-        key = f"title.menu#cover{size[0]}x{size[1]}"
-        scaled = self.g.assets._images.get(key)
-        if scaled is None:
-            scaled = pygame.transform.smoothscale(art, size)
-            self.g.assets._images[key] = scaled
-        ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
-                                 (target[1] - size[1]) // 2))
-        # 字壓在畫上面就會糊。壓到 158 之後對比夠了，畫也還在 —— 主視覺是
-        # 背景，不是要跟文字搶注意力的東西。
-        ui.veil(158)
-
         col = _col(ui, MID - 170, 196, 340, 220, gap=12)
         if ui.button("campaign", col.slot(ui.s(60)), "七夜",
                      "撐過七個夜晚，每一夜都有牠們的頭目"):
@@ -139,6 +114,32 @@ class MenuScene(Scene):
         ui.text(best, (ui.s(MID), ui.s(566)), "small", P.MUTED, "center")
         ui.text("方向鍵或滑鼠選擇　·　Enter 確定　·　F11 全螢幕",
                 (ui.s(MID), ui.s(614)), "small", P.MUTED, "center")
+
+    def _backdrop(self, ui: UI) -> None:
+        """主視覺鋪滿，字壓在上面；沒有圖就退回原本的純色。
+
+        照 cover 的方式裁切而不是拉伸 —— 主視覺的構圖是刻意的（提燈在左下、
+        糖果屋在右上），拉扁它等於把那個構圖丟掉。
+        """
+        art = self.g.assets.image("title.menu")
+        if art is None:
+            ui.veil(252)
+            return
+        target = ui.surface.get_size()
+        aw, ah = art.get_size()
+        k = max(target[0] / aw, target[1] / ah)
+        size = (max(1, int(aw * k)), max(1, int(ah * k)))
+        key = f"title.menu#cover{size[0]}x{size[1]}"
+        scaled = self.g.assets._images.get(key)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(art, size)
+            self.g.assets._images[key] = scaled
+        ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
+                                 (target[1] - size[1]) // 2))
+        # 字壓在畫上面就會糊。壓到 158 之後對比夠了，畫也還在 —— 主視覺是
+        # 背景，不是要跟文字搶注意力的東西。
+        ui.veil(158)
+
 
     def _difficulty(self, ui: UI) -> None:
         """四段難度，橫排在選單下面。
