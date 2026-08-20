@@ -147,6 +147,10 @@ BOSS_FLINCH_GAP: Final = 2.0
 #: 接觸類技能（疾風、雷鳴）對王的傷害間隔。
 CONTACT_GAP: Final = 0.9
 
+#: 只能從左右兩側進場的怪。場地寬 900、高 520，從上下來的路程只有一半多，
+#: 而需要繞背的怪需要那段路程。
+SIDE_ONLY_SPAWNS: Final = ("mirror",)
+
 #: Shot kinds that rebound off the walls instead of expiring at them, and leave
 #: a patch of fire wherever they finally stop.
 BOUNCING_SHOTS: Final = ("fireball",)

@@ -198,9 +198,32 @@ class FontBook:
         surface.set_alpha(max(0, alpha))
         return surface
 
+    def _size(self, font, text: str) -> tuple[int, int]:
+        """``font.size`` that never raises.
+
+        字型是子集，只收原始碼裡出現過的字 —— 而遊戲裡有一整批字串是**執行時
+        才組出來的**（評分頁的「最弱的一環：漢賽爾　受傷 6 次」就是拼出來的）。
+        任何一個沒被 build_font 掃到的字，都會讓 SDL_ttf 在 ``size()`` 拋
+        "Couldn't find glyph"。
+
+        ``render`` 早就有這個防護，``size`` 沒有 —— 而每一次排版都會先量寬度，
+        所以缺字實際上是從量測那一步殺掉遊戲的，不是從畫的那一步。缺字應該是
+        「那個字變成空白」，不是「遊戲關掉」。
+        """
+        try:
+            return font.size(text)
+        except pygame.error as exc:
+            if text not in self._warned:
+                self._warned.add(text)
+                print(f"[gingerbread] 這行字量不出寬度：{text!r} — {exc}")
+            # 退回一個估計值：中日韓字大約是行高的寬度，其餘算一半。
+            unit = font.get_linesize()
+            wide = sum(1 for ch in text if ord(ch) > 0x2E7F)
+            return (int(wide * unit + (len(text) - wide) * unit * 0.5), unit)
+
     def measure(self, text: str, size: str = "body") -> tuple[int, int]:
         """Return the pixel size this text would occupy."""
-        return self._fonts[size].size(text)
+        return self._size(self._fonts[size], text)
 
     def line_height(self, size: str = "body") -> int:
         return self._fonts[size].get_linesize()
@@ -233,14 +256,14 @@ class FontBook:
     def truncate(self, text: str, size: str, width: int, ellipsis: str = "…") -> str:
         """Shorten ``text`` until it fits ``width``, appending an ellipsis."""
         font = self._fonts[size]
-        if font.size(text)[0] <= width:
+        if self._size(font, text)[0] <= width:
             return text
-        budget = width - font.size(ellipsis)[0]
+        budget = width - self._size(font, ellipsis)[0]
         if budget <= 0:
             return ellipsis
         current = ""
         for char in text:
-            if font.size(current + char)[0] > budget:
+            if self._size(font, current + char)[0] > budget:
                 break
             current += char
         return current + ellipsis

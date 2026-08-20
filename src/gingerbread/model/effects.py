@@ -127,8 +127,8 @@ def smite(state: State, spec) -> None:
         life=float(spec.params.get("slow_life", 4.5)),
         spares_player=True))
 
-    state.effects.append(Effect("bolt", p.x, p.y, 0.35, 0.35, radius))
-    state.feedback.bump(shake=10.0, freeze=0.07)
+    state.effects.append(Effect("bolt", p.x, p.y, 0.45, 0.45, radius))
+    state.feedback.bump(shake=14.0, freeze=0.09)
     _expose_matching(state, spec)
 
 
@@ -286,12 +286,15 @@ def surge_wave(state: State, spec) -> None:
     reach = float(spec.params.get("radius", 150.0))
     push = float(spec.params.get("push", 110.0))
     boss = int(spec.params.get("boss", 16))
+    gap = float(spec.params.get("gap", 0.34))
     for i in range(3):
         state.hazards.append(Hazard(
             kind="wave", x=p.x, y=p.y,
-            radius=reach * (0.45 + 0.275 * i),
-            # 依序出發，所以讀起來是三道浪，不是一個閃三下的圓。
-            life=0.42 + i * 0.20,
+            # 三圈的大小拉開：0.40 / 0.70 / 1.00，不是擠在 0.45～1.00 之間。
+            radius=reach * (0.40 + 0.30 * i),
+            # 出發時間也拉開。原本間隔 0.20 秒，三圈幾乎同時掃過同一個位置，
+            # 看起來像一個閃三下的圓而不是三道浪。
+            life=0.38 + i * gap,
             hold=push, charges=boss))
         state.hazards[-1].hold_life = state.hazards[-1].life
     state.mist_ticks = max(state.mist_ticks,

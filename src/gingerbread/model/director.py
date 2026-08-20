@@ -55,7 +55,10 @@ def _place_warning(state: State, key: str, *, surge: bool = False) -> None:
     # 地圖可以自己指定進場點，而其中好幾個在場中央 —— 從那裡冒出來的怪，玩家
     # 沒有時間差可以反應：它出現的位置已經在葛蕾特和他之間了。守方遊戲的公平
     # 性建立在「威脅從外面來、你有一段路可以攔」上面，中場生怪把那段路拿掉。
-    x, y = g.edge_point(state.streams.spawn)
+    if key in C.SIDE_ONLY_SPAWNS:
+        x, y = g.side_point(state.streams.spawn)
+    else:
+        x, y = g.edge_point(state.streams.spawn)
     rules.add_warning(state, key, x, y, surge=surge)
 
 

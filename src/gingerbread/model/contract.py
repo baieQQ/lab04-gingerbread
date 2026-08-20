@@ -24,6 +24,7 @@ import json
 from copy import deepcopy
 
 from . import constants as C
+from . import geometry as g
 from . import rules
 from .content import SPELLS as SPELL_TABLE
 from .content import stage_for
@@ -120,12 +121,15 @@ def _lay_out_day(state: State) -> None:
     recipe = stage.recipe
     state.sleepers = []
     for index, key in enumerate(recipe):
-        radius = 190.0 + (index % 3) * 42.0
-        offset_x, offset_y = ring_offset(state.rng, index, len(recipe), radius)
+        # 站在場邊，不是站在葛蕾特周圍。
+        #
+        # 原本排在她身邊 190–274 px 的環上，而這些村民是**就地變身**的 ——
+        # 所以每一夜開頭都有一整圈怪直接出現在她跟漢賽爾之間，中間沒有任何
+        # 可以攔截的距離。夜晚的生怪已經一律改成從場邊進來了，這條路是漏掉
+        # 的第二條，而且它比另一條更近。
+        x, y = g.perimeter_slot(index, len(recipe))
         state.sleepers.append((
-            key,
-            C.SISTER_X + offset_x,
-            C.SISTER_Y + offset_y * 0.72,
+            key, x, y,
             to_ticks(1.2 + index * (22.0 / max(1, len(recipe)))),
         ))
 
@@ -273,7 +277,7 @@ def parse_action(action: str) -> tuple[str, object]:
     nothing and raises immediately rather than after a deep copy.
     """
     if action in ("tick", "swing", "begin_night", "next_night", "retry",
-                  "whet", "oil", "godmode", "seeall"):
+                  "whet", "oil", "godmode", "seeall", "skipnight"):
         return (action, None)
 
     if action.startswith("move:"):
@@ -378,6 +382,22 @@ def apply_action(state: State, action: str) -> State:
         nxt.meta.godmode = not nxt.meta.godmode
         nxt.emit("godmode:on" if nxt.meta.godmode else "godmode:off")
         return nxt
+
+    if verb == "skipnight":
+        # 跳到下一夜的白天。測試用 —— 第四夜以後的怪，不該每次都要從第一夜
+        # 打一小時才看得到。
+        if (nxt.meta.mode is not Mode.CAMPAIGN
+                or nxt.meta.night >= C.CAMPAIGN_NIGHTS):
+            return nxt
+        # 走 _next_night 同一條路（new_game 帶著 meta 重開），所以跳關拿到的
+        # 白天跟正常過關拿到的白天是同一個東西 —— 不是另一條會慢慢長歪的路。
+        carried = deepcopy(nxt.meta)
+        carried.night += 1
+        carried.skill_points_1 += 1
+        carried.skill_points_2 += 1
+        carried.sugar += 40
+        carried.sister_hp = carried.max_sister_hp
+        return new_game(nxt.seed, carried)
 
     if verb == "seeall":
         # 開圖。跟 godmode 一樣走 model，所以 HUD 和快照都知道它開著。

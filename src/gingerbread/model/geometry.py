@@ -146,6 +146,36 @@ def ring_offset(rng, index: int, count: int, radius: float,
             round(math.sin(turn) * radius, 9))
 
 
+def perimeter_slot(index: int, count: int,
+                   inset: float = C.SPAWN_EDGE_INSET) -> tuple[float, float]:
+    """第 ``index`` 個位置，沿著左右兩側均分。**不用亂數。**
+
+    白天站在場邊的那些村民就是今晚會變的那些怪，而「今晚會遇到誰」是設計，不
+    是運氣 —— 所以它們的位置由索引決定，不由種子決定。這是有測試在守的規則。
+
+    只用左右兩側：場地 900×520，從上下走到葛蕾特面前的路程只有一半多，而白天
+    的村民排在哪一邊，決定的是玩家有多少時間攔它。
+    """
+    half = max(1, (count + 1) // 2)
+    row = index // 2
+    x = inset if index % 2 == 0 else C.WIDTH - inset
+    span = C.HEIGHT - inset * 2
+    y = inset + span * ((row + 0.5) / half)
+    return (x, y)
+
+
+def side_point(rng, inset: float = C.SPAWN_EDGE_INSET) -> tuple[float, float]:
+    """只從左右兩邊進場。
+
+    場地是 900×520 —— 寬比高多了將近一倍。從上下進來的東西，走到葛蕾特面前的
+    路程只有從左右進來的一半多一點，所以同一隻怪從哪一邊來，難度差很多。鏡子
+    怪要繞到背後才打得到，那個繞行需要空間，從上下進場等於沒有空間。
+    """
+    if rng.below(2) == 0:
+        return (inset, inset + rng.random() * (C.HEIGHT - inset * 2))
+    return (C.WIDTH - inset, inset + rng.random() * (C.HEIGHT - inset * 2))
+
+
 def edge_point(rng, inset: float = C.SPAWN_EDGE_INSET) -> tuple[float, float]:
     """Return a random point on the playfield perimeter.
 

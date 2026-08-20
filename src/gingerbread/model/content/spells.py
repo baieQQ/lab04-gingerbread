@@ -38,9 +38,13 @@ SPELLS: Final[dict[str, SpellSpec]] = {
         # 傷害 2 的時候，範圍內大部分的怪（3-5 滴血）被震開之後照樣活著，
         # 玩家看到的是「怪飛走了，沒人死」—— 那讀起來就是沒有傷害。3 讓輕的
         # 那一群當場清空，硬的那幾種還是要補第二下，跟提燈同一條規則。
-        params={"radius": 62.0, "push": 210.0,
+        # 半徑 220：這個技能的價值只取決於圈進去幾隻，所以圈要大。62 的時候
+        # 玩家放完看到兩隻閃一下，讀起來像什麼都沒發生；220 是差不多半個場地，
+        # 一放下去整片都剩一滴血，接著一輪揮燈可以收乾淨 —— 那才是「破甲」該
+        # 有的感覺。
+        params={"radius": 220.0, "push": 210.0,
                 "boss": 6.0, "slow": 0.3, "slow_life": 4.5,
-                "slow_radius": 78.0},
+                "slow_radius": 96.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(
@@ -111,6 +115,7 @@ SPELLS: Final[dict[str, SpellSpec]] = {
                     "敵人走得更慢",
         cost=1, cooldown=28.0, duration=0.0,
         effect="surge_wave",
-        params={"radius": 170.0, "mist": 5.0, "push": 110.0, "boss": 20.0},
+        params={"radius": 200.0, "mist": 5.0, "push": 110.0, "boss": 20.0,
+                "gap": 0.34},
         colour=(96, 150, 220)),
 }

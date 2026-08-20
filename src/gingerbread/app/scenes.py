@@ -1235,11 +1235,13 @@ class PlayScene(Scene):
                 frac = 1.0 - p.swing_cooldown / full
                 live = p.swing_cooldown <= 0
                 held = p.swing_anim > 0
+                key = ""
             elif i == 1:                                 # K — the guard
                 held = p.guarding
                 live = not p.helpless
+                key = ""
             else:                                        # L / ； — the skills
-                key = state.meta.slots[slot]
+                key = state.meta.slots[slot] or ""
                 spec = SPELL_TABLE.get(key) if key else None
                 if spec is None:
                     name = "—"
@@ -1254,7 +1256,8 @@ class PlayScene(Scene):
                     # full.  That is the press, read back out of the rules.
                     held = left > total - 8
 
-            self._key_cell(ui, rect, tag, name or "—", frac, live, held, i)
+            self._key_cell(ui, rect, tag, name or "—", frac, live, held, i,
+                           key=key)
 
     @staticmethod
     def _key_icon(ui: UI, rect: pygame.Rect, slot: int, colour) -> None:
@@ -1284,7 +1287,8 @@ class PlayScene(Scene):
             pygame.draw.circle(ui.surface, colour, (cx, cy), r, max(2, ui.s(2)))
 
     def _key_cell(self, ui: UI, rect: pygame.Rect, tag: str, name: str,
-                  frac: float, live: bool, held: bool, slot: int = 0) -> None:
+                  frac: float, live: bool, held: bool, slot: int = 0,
+                  key: str = "") -> None:
         # The jolt.  Two pixels, upward — enough to register as a response and
         # small enough that four of them firing at once is not a jumble.
         if held:
@@ -1313,7 +1317,22 @@ class PlayScene(Scene):
         # colour put a dark grey glyph on top of the cooldown fill, which hid
         # the one character telling the player which key this cell is.
         letter = P.EMBER if held else (P.ARCANE_BRIGHT if live else P.BONE_DIM)
-        self._key_icon(ui, rect, slot, letter)
+        # 有畫好的圖示就用畫的，沒有才退回程式畫的幾何符號。
+        #
+        # J / K 永遠是程式畫的（揮燈和防禦不是技能，沒有對應的圖），L / ；則
+        # 看當下裝的是哪一個技能 —— 所以換技能的時候，圖示也跟著換。
+        art = None
+        if key:
+            art = self.g.assets.fitted(f"icon.{key}", ui.s(20))
+        if art is not None:
+            if not live and not held:
+                art = art.copy()
+                art.fill((120, 120, 130, 255),
+                         special_flags=pygame.BLEND_RGBA_MULT)
+            ui.surface.blit(art, art.get_rect(
+                center=(rect.centerx, rect.top + ui.s(13))))
+        else:
+            self._key_icon(ui, rect, slot, letter)
         ui.text(tag, (rect.centerx, rect.centery + ui.s(2)), "small",
                 letter, "center")
         ui.text(name, (rect.centerx, rect.bottom - ui.s(11)), "small",
@@ -1967,6 +1986,12 @@ class CodexScene(Scene):
                 if art is not None:
                     ui.surface.blit(art, art.get_rect(
                         midleft=(ui.s(MID - 382), ui.s(y + 12))))
+                else:
+                    # 沒有立繪的就用程式畫 —— 場上長什麼樣，圖鑑就長什麼樣。
+                    # 一半有圖一半空白的圖鑑，會讓人以為沒圖的那幾隻是還沒
+                    # 做完的東西，而它們其實跟有圖的一樣完整。
+                    self._drawn_figure(ui, art_key,
+                                       ui.s(MID - 360), ui.s(y + 12))
             ui.text(title, (ui.s(MID - 320), ui.s(y)), "body", P.BONE)
             ui.text(stats, (ui.s(MID - 150), ui.s(y + 2)), "small", P.BONE_DIM)
             if note:
@@ -1981,6 +2006,23 @@ class CodexScene(Scene):
 
         if ui.button("back", ui.box(MID - 90, 578, 180, 40), "返回"):
             app.pop()
+
+    def _drawn_figure(self, ui: UI, art_key: str, x: int, y: int) -> None:
+        """把場上那個程式畫的身形，畫進圖鑑這一列。"""
+        from ..view import figures as F
+        from ..view.board import _BUILD
+
+        key = art_key.split(".", 1)[-1]
+        spec = MONSTERS.get(key) or BOSSES.get(key)
+        if spec is None:
+            return
+        F.shadow(ui.surface, x, y + ui.s(15), ui.s(11))
+        F.humanoid(ui.surface, x, y + ui.s(6), ui.s(15),
+                   getattr(spec, "colour", P.BLOOD),
+                   build=_BUILD.get(getattr(spec, "silhouette", "villager"),
+                                    "adult"),
+                   phase=0.35, moving=False, squash=0.0,
+                   facing=(0.0, 1.0))
 
     def _rows(self) -> list[tuple[str, str, str]]:
         if self.page == 0:
