@@ -110,6 +110,9 @@ MIST_SLOW: Final = 2.0 / 3.0
 #: the same recovery a decision — it is lying somewhere, and going to fetch it
 #: means leaving her side, which is the trade this whole game is built on.
 HEART_DROP_CHANCE: Final = 0.14
+#: 補葛蕾特的心的掉落機率。比補漢賽爾的低，因為她的血是勝負本身 —— 但不能是
+#: 零，否則前幾夜的失誤會鎖死整局。
+SISTER_HEART_CHANCE: Final = 0.07
 #: Half-hearts one restores.
 HEART_VALUE: Final = 1
 
@@ -136,6 +139,11 @@ ROCK_CLEAR_ROCK: Final = 54.0
 WEAKNESS_MULTIPLIER: Final = 3.0
 #: Seconds a boss stays open after its weakness lands.
 WEAKNESS_WINDOW: Final = 3.0
+
+#: 聖光亮著的時候，所有敵人剩幾成速度。
+HOLY_SLOW: Final = 0.72
+#: 王被打斷之後，多久之內不會再被打斷。
+BOSS_FLINCH_GAP: Final = 2.0
 
 #: Shot kinds that rebound off the walls instead of expiring at them, and leave
 #: a patch of fire wherever they finally stop.

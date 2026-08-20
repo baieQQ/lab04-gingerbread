@@ -252,6 +252,8 @@ class Drop:
     fake: bool = False
     #: Half-hearts restored instead of sugar paid.  Zero for ordinary sugar.
     heal: int = 0
+    #: True 的話這顆心是補葛蕾特的，不是補漢賽爾的。
+    sister: bool = False
 
 
 @dataclass(slots=True)
@@ -333,6 +335,11 @@ class Hazard:
     sprung: bool = False
     #: What it does when its life runs out — the water cage's parting blast.
     strength: float = 0.0
+    #: 出生時的 life，用來反推「已經走了幾成」。怒潮的水波靠它決定現在多大。
+    hold_life: float = 1.0
+    #: 這一幀實際的作用半徑（會長大的 hazard 才用）。渲染器讀它，所以畫出來
+    #: 的圈跟判定到的圈永遠是同一個。
+    reach: float = 0.0
 
 
 @dataclass(slots=True)

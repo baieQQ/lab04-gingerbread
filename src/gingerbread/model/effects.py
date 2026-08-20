@@ -68,56 +68,63 @@ def _kill_within(state: State, x: float, y: float, radius: float,
 
 # ── 一階 ─────────────────────────────────────────────────────────────
 @spell("smite", label="閃電",
-       note="立刻在腳下劈下閃電：震開周圍的敵人，並留下一片電焦的地面",
-       params={"radius": (54.0, "打得到多寬"),
-               "damage": (2.0, "扣多少血"),
-               "push": (165.0, "擊退距離"),
-               "slow": (0.4, "焦地上剩幾成速度"),
-               "slow_life": (3.5, "焦地留多久"),
-               "slow_radius": (66.0, "焦地多寬")})
+       note="範圍內的敵人被劈到只剩一滴血、護甲全碎，並被轟開",
+       params={"radius": (62.0, "打得到多寬"),
+               "push": (210.0, "擊退距離"),
+               "slow": (0.3, "焦地上剩幾成速度"),
+               "slow_life": (4.5, "焦地留多久"),
+               "slow_radius": (78.0, "焦地多寬")})
 def smite(state: State, spec) -> None:
-    """雷 · 閃電 — control, not deletion.
+    """雷 · 閃電 — 破甲，不是傷害。
 
-    It used to empty the health bar of everything in the circle, and it was
-    charged.  Both were wrong for the same reason: the skill answered the
-    question "is the field clear yet" instead of "where do I want them to be".
-    A charge asks the player to hold a key while eight things walk at their
-    sister, which is the one moment in the game they cannot spare a thumb for.
+    範圍內的每一隻怪都被削到剩一滴血，護甲直接碎掉。它幾乎不殺人 —— 它讓下
+    一下揮燈殺得掉所有人。
 
-    So it fires the instant it is pressed, kills almost nothing, and *moves*
-    everything — a hard shove outward plus a patch of scorched ground that
-    slows whatever tries to walk back in.  That turns it into space, which is
-    the currency a defender actually spends.
+    這比「一個更大的傷害數字」好，理由是它**跟怪物的血量無關**。壯漢五滴血、
+    盔甲怪四滴加三點護甲、村民兩滴 —— 一個固定傷害的技能對這三種怪意義完全
+    不同，而玩家在按下去的那一刻分不出面前那一團是哪幾種。剩一滴血對全部人
+    都一樣，所以這個技能的價值只取決於**圈進去幾隻**，那是玩家真的能控制的
+    東西。
+
+    王不吃這一套 —— 把王削到剩一滴血等於刪掉整場戰鬥。王照舊吃固定傷害。
     """
     from .rules import _push as shove, damage_target
 
     p = state.player
-    radius = float(spec.params.get("radius", 54.0))
-    damage = int(spec.params.get("damage", 2))
-    push = float(spec.params.get("push", 165.0))
-    boss_damage = int(spec.params.get("boss", 5))
+    radius = float(spec.params.get("radius", 62.0))
+    push = float(spec.params.get("push", 210.0))
+    boss_damage = int(spec.params.get("boss", 6))
+    struck = 0
 
     for target in _targets(state):
         if g.distance(target.x, target.y, p.x, p.y) > radius:
             continue
         shove(target, p.x, p.y, push)
-        # 快，才讀得出來是被「震開」。一般擊退是 150 px/s，165 像素要飄一秒
-        # 多 —— 那看起來像怪物自己慢慢走開，不像挨了一道雷。
+        # 快，才讀得出來是被「震開」。一般擊退是 150 px/s，210 像素要飄一秒
+        # 半 —— 那看起來像怪物自己慢慢走開，不像挨了一道雷。
         target.knock_speed = C.BOLT_SPEED
-        amount = boss_damage if target in state.bosses else damage
-        if amount > 0:
-            damage_target(state, target, amount, element=spec.element,
-                          from_x=p.x, from_y=p.y)
+        struck += 1
+        if target in state.bosses:
+            if boss_damage > 0:
+                damage_target(state, target, boss_damage, element=spec.element,
+                              from_x=p.x, from_y=p.y)
+            continue
+        target.armour = 0
+        if target.hp > 1:
+            target.hp = 1
+            target.hit_flash = 0.14
+            state.effects.append(Effect("spark", target.x, target.y, 0.3, 0.3))
+    if struck:
+        state.emit("sundered")
 
-    # The scorch is the half of the skill that lasts.  Reusing ``Puddle`` means
-    # the slow flows through the same ``_ground_drag`` every other surface uses,
-    # so nothing downstream has to learn about lightning.
+    # 焦地是這個技能留下來的那一半：被削到剩一滴血的東西還得走回來，而它們
+    # 走得很慢。
     state.puddles.append(Puddle(
         x=p.x, y=p.y,
-        radius=float(spec.params.get("slow_radius", 66.0)),
+        radius=float(spec.params.get("slow_radius", 78.0)),
         kind="shock",
-        slow=float(spec.params.get("slow", 0.4)),
-        life=float(spec.params.get("slow_life", 3.5)),
+        slow=float(spec.params.get("slow", 0.3)),
+        life=float(spec.params.get("slow_life", 4.5)),
         spares_player=True))
 
     state.effects.append(Effect("bolt", p.x, p.y, 0.35, 0.35, radius))
@@ -151,19 +158,30 @@ def reveal_all(state: State, spec) -> None:
                "radius": (52.0, "捲得到多寬"),
                "hold": (2.5, "被放下之後還昏多久")})
 def twister(state: State, spec) -> None:
-    """風 · 龍捲風 — position control you have to aim."""
+    """風 · 龍捲風 — 三道，呈扇形散開。
+
+    一道的時候太難中：它是一個會走的圓，而玩家在放的當下沒辦法預測三秒後那
+    群怪會在哪裡。三道散開之後，這個技能問的問題從「我瞄得準嗎」變成「他們
+    大致在哪個方向」—— 後者玩家答得出來，前者答不出來。
+    """
     p = state.player
     dx, dy = g.normalise(p.face_x, p.face_y)
     if dx == 0.0 and dy == 0.0:
         dx, dy = 1.0, 0.0
     speed = float(spec.params.get("speed", 150.0))
-    state.hazards.append(Hazard(
-        kind="twister", x=p.x + dx * 36.0, y=p.y + dy * 36.0,
-        radius=float(spec.params.get("radius", 52.0)),
-        life=float(spec.duration), vx=dx * speed, vy=dy * speed,
-        hold=float(spec.params.get("hold", 2.5))))
-    state.effects.append(Effect("tornado", p.x, p.y, 0.5, 0.5, 120))
-    state.feedback.bump(shake=8.0)
+    radius = float(spec.params.get("radius", 52.0))
+    hold = float(spec.params.get("hold", 2.5))
+    spread = float(spec.params.get("spread", 0.38))
+    heading = math.atan2(dy, dx)
+    for offset in (-spread, 0.0, spread):
+        angle = heading + offset
+        state.hazards.append(Hazard(
+            kind="twister", x=p.x, y=p.y, radius=radius,
+            life=float(spec.duration),
+            vx=math.cos(angle) * speed, vy=math.sin(angle) * speed,
+            hold=hold))
+    state.effects.append(Effect("twister", p.x, p.y, 0.4, 0.4, int(radius)))
+    state.feedback.bump(shake=4.0)
     _expose_matching(state, spec)
 
 
@@ -256,21 +274,30 @@ def gale(state: State, spec) -> None:
                "mist": (5.0, "水霧持續幾秒"),
                "push": (110.0, "爆炸擊退")})
 def surge_wave(state: State, spec) -> None:
-    """水 · 怒潮 — a small kill and a large inconvenience.
+    """水 · 怒潮 — 三圈由內往外推的水波。
 
-    The blast is the smallest of the second tier; the mist is the largest thing
-    any skill does, and it is the part worth two points.  Everything on the map
-    walks at two thirds speed, which does not save the player from anything —
-    it gives them time to save themselves.
+    原本是一個 50 半徑的小爆炸加上一場大霧，而那個爆炸小到玩家常常以為自己
+    放空了。改成三圈依序擴出去的浪：每一圈都會清掉它掃過的東西，所以站在中
+    間放，會看到一圈一圈把場地推乾淨。
+
+    霧還是這個技能真正值兩點的地方 —— 爆炸解決眼前，霧解決接下來的五秒。
     """
     p = state.player
-    _kill_within(state, p.x, p.y, float(spec.params.get("radius", 50.0)),
-                 spec.element, push=float(spec.params.get("push", 110.0)),
-                 boss=int(spec.params.get("boss", 16)))
+    reach = float(spec.params.get("radius", 150.0))
+    push = float(spec.params.get("push", 110.0))
+    boss = int(spec.params.get("boss", 16))
+    for i in range(3):
+        state.hazards.append(Hazard(
+            kind="wave", x=p.x, y=p.y,
+            radius=reach * (0.45 + 0.275 * i),
+            # 依序出發，所以讀起來是三道浪，不是一個閃三下的圓。
+            life=0.42 + i * 0.20,
+            hold=push, charges=boss))
+        state.hazards[-1].hold_life = state.hazards[-1].life
     state.mist_ticks = max(state.mist_ticks,
                            int(round(float(spec.params.get("mist", 5.0))
                                      / C.FIXED_DT)))
-    state.effects.append(Effect("surge_wave", p.x, p.y, 0.6, 0.6, 50))
+    state.effects.append(Effect("surge_wave", p.x, p.y, 0.7, 0.7, int(reach)))
     state.feedback.bump(shake=14.0, freeze=0.08)
     _expose_matching(state, spec)
 

@@ -850,15 +850,33 @@ class PlayScene(Scene):
             x += 62
 
         ui.text("葛蕾特", (ui.s(x), ui.s(9)), "tiny", P.MUTED)
+        # 她的血是這款遊戲唯一真正的失敗條件，所以它要是 HUD 上最亮的東西。
+        #
+        # 原本三種狀態用的是同一個暗紅的三個明度，半顆心的差別小到看不出來 ——
+        # 而半顆心正是玩家最需要立刻知道的那一格。改成滿血鮮紅、半血橘黃、空
+        # 的只剩一圈輪廓：三種狀態現在是三種顏色，不是三種深淺。
         hearts = state.meta.max_sister_hp // 2
+        low = state.meta.sister_hp <= 2
         for i in range(hearts):
             left = state.meta.sister_hp - i * 2
-            colour = (P.BLOOD if left >= 2
-                      else P.mix(P.BLOOD, P.BLOOD_DARK, 0.5) if left == 1
-                      else P.BLOOD_DARK)
-            pygame.draw.circle(ui.surface, colour,
-                               (ui.s(x + 6 + i * 14), ui.s(33)), ui.s(5))
-        x += hearts * 14 + 24
+            centre = (ui.s(x + 7 + i * 16), ui.s(33))
+            if left >= 2:
+                pygame.draw.circle(ui.surface, (255, 62, 74), centre, ui.s(6))
+                pygame.draw.circle(ui.surface, (255, 176, 176), centre,
+                                   ui.s(2), 0)
+            elif left == 1:
+                pygame.draw.circle(ui.surface, (255, 158, 44), centre, ui.s(6))
+                pygame.draw.circle(ui.surface, (26, 16, 18), centre, ui.s(6),
+                                   ui.s(2))
+            else:
+                pygame.draw.circle(ui.surface, (86, 40, 46), centre, ui.s(6), 2)
+        if low:
+            # 剩一顆心的時候整排跟著脈動。這不是裝飾 —— 玩家在夜裡盯著場地，
+            # 不會有空去讀 HUD，會動的東西才進得了餘光。
+            pulse = 0.5 + 0.5 * math.sin(self.g.ticks / 7.0)
+            ui.text("危險", (ui.s(x + hearts * 16 + 6), ui.s(33)), "tiny",
+                    P.mix(P.PANEL, (255, 96, 96), pulse), "left")
+        x += hearts * 16 + 46
 
         ui.text("漢賽爾", (ui.s(x), ui.s(9)), "tiny", P.MUTED)
         for i in range(state.player.max_hp):
@@ -1748,9 +1766,13 @@ class ResultScene(Scene):
     """
 
     #: Seconds the untouched final frame stays on screen before anything moves.
-    HOLD = 0.45
+    #:
+    #: 慢，是這一拍的重點。0.45 + 1.35 剛好快到玩家還來不及看清楚剛才發生
+    #: 什麼，選單就蓋上來了 —— 那是把「我輸了」壓縮成一個轉場。拉長之後那一
+    #: 幀有時間被讀完：她在哪裡、有幾隻圍著她、燈在多遠的地方。
+    HOLD = 0.95
     #: Seconds the frozen frame takes to fade away under the menu.
-    FADE = 1.35
+    FADE = 2.60
     #: How much of the final frame is still visible once the fade has finished.
     #: High on purpose — the frame is the *background* of the menu, not a thing
     #: being cleared away.  At 26 it faded to a black screen with a hint of

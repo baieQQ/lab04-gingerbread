@@ -48,6 +48,27 @@ def spec_of(monster: Monster):
 
 
 # ── the tick ─────────────────────────────────────────────────────────
+def _accept_casts(state: State, inputs, dt: float) -> None:
+    """把這一格按下的技能鍵處理掉。
+
+    A held key does *not* arrive on every tick: the shell sends movement and
+    casting as two separate actions, so the movement tick always looks like
+    "the key is up".  Charging therefore ends only after several consecutive
+    ticks with no cast — which is why holding the key used to fire instantly.
+    """
+    held = {w.split(":", 1)[1] for w in inputs if w.startswith("cast:")}
+    p = state.player
+    if p.charging:
+        if p.charging in held:
+            p.charge_idle = 0.0
+        else:
+            p.charge_idle += dt
+            if p.charge_idle > C.CHARGE_RELEASE:
+                release_charge(state)
+    for key in held:
+        cast(state, key)
+
+
 def step(state: State, inputs: set[str], director) -> State:
     """Advance exactly one fixed time step.  Mutates and returns ``state``.
 
@@ -77,9 +98,17 @@ def step(state: State, inputs: set[str], director) -> State:
     if state.phase is not Phase.NIGHT:
         return state
 
-    # Hit-stop freezes the world but never the feedback decay above — putting
-    # the decay inside this branch is exactly the bug that made the web build
-    # shake forever once a freeze ended.
+    # 頓幀凍結的是**世界**，不是玩家的手。
+    #
+    # 這個 return 原本擋在施法之前，所以任何在頓幀期間按下的技能都會被整包丟
+    # 掉 —— 而頓幀正好發生在最想按技能的那些時刻：王進場（0.12 秒）、每一次
+    # 擊殺（0.035 秒）、怒潮爆炸（0.08 秒）。玩家按了，什麼都沒發生，然後怪
+    # 到臉上。他學到的是「這技能有時候會失靈」。
+    #
+    # 施法搬到凍結判斷之前。技能在被凍住的那一格生效，世界下一格才恢復 ——
+    # 兩三格的差別看不出來，按下去沒反應則是每次都看得出來。
+    _accept_casts(state, inputs, dt)
+
     if state.feedback.freeze > 0:
         return state
 
@@ -103,22 +132,6 @@ def step(state: State, inputs: set[str], director) -> State:
     # shell already sends ``cast:`` on every frame the key is held, so holding
     # and releasing are readable here without a new action word — and a player
     # who taps still gets the un-charged version, which is what a tap means.
-    held = {w.split(":", 1)[1] for w in inputs if w.startswith("cast:")}
-    p = state.player
-    # A held key does *not* arrive on every tick: the shell sends movement and
-    # casting as two separate actions, so the movement tick always looks like
-    # "the key is up".  Charging therefore ends only after several consecutive
-    # ticks with no cast — which is why holding the key used to fire instantly.
-    if p.charging:
-        if p.charging in held:
-            p.charge_idle = 0.0
-        else:
-            p.charge_idle += dt
-            if p.charge_idle > C.CHARGE_RELEASE:
-                release_charge(state)
-    for key in held:
-        cast(state, key)
-
     # Nothing arrives or acts until the screen has finished going dark, so the
     # player is never hit by something that spawned behind a fade.
     if state.dusk >= 1.0:
@@ -385,9 +398,22 @@ def damage_target(state: State, target: Monster, amount: int, *,
     # accomplishes nothing unless killing it outright, and "kill it or it fires"
     # is not a window, it is a deadline.  Bosses do not flinch — one that could
     # be permanently interrupted would never get a phase off.
-    if target.charge > 0 and target not in state.bosses:
+    # 王也會被打斷 —— 但打斷過一次之後有一小段免疫。
+    #
+    # 原本王完全不會被打斷，理由是「一個能被永久打斷的王永遠放不出招」。那個
+    # 顧慮是對的，解法不是。褪影射手站在遠處慢慢拉弓，玩家看得到蓄力光、跑過
+    # 去、打中它 —— 然後箭照樣射出來。畫面上明明是一個「快去阻止它」的提示，
+    # 而阻止它這件事實際上不存在，那個提示等於在騙人。
+    #
+    # 免疫窗口解決原本的顧慮：打斷一次要付出跑過去的代價，而它兩秒內不會再被
+    # 打斷第二次，所以下一輪蓄力一定放得出來。
+    interruptible = (target not in state.bosses
+                     or target.memory.get("unflinch", 0.0) <= 0)
+    if target.charge > 0 and interruptible:
         target.charge = 0.0
         target.memory["reload"] = max(target.memory.get("reload", 0.0), 0.8)
+        if target in state.bosses:
+            target.memory["unflinch"] = C.BOSS_FLINCH_GAP
         state.effects.append(Effect("spoiled", target.x, target.y, 0.35, 0.35))
         state.emit(f"interrupted:{target.spec}")
     if getattr(spec, "knockable", True) and from_x is not None:
@@ -428,6 +454,17 @@ def _kill(state: State, target: Monster, *, by_lantern: bool) -> None:
             and state.streams.loot.random() < C.HEART_DROP_CHANCE:
         state.drops.append(Drop(x=target.x + 14.0, y=target.y - 10.0,
                                 value=0, heal=C.HEART_VALUE))
+
+    # 葛蕾特的血過去只有 聖癒 和白天買繃帶能補，所以一個前面幾夜掉了三顆心
+    # 的玩家，等於帶著永久的傷走完剩下的四夜 —— 一次失誤決定了整局，而且是
+    # 在他還沒學會怎麼玩的時候決定的。
+    #
+    # 同樣只在她真的受傷時才擲，機率更低、發光更亮。撿它要離開崗位走過去，
+    # 所以它從來不是白拿的：那是一個「現在敢不敢離開她三秒」的決定。
+    if state.meta.sister_hp < state.meta.max_sister_hp \
+            and state.streams.loot.random() < C.SISTER_HEART_CHANCE:
+        state.drops.append(Drop(x=target.x - 14.0, y=target.y - 10.0,
+                                value=0, heal=C.HEART_VALUE, sister=True))
     state.effects.append(Effect("burst", target.x, target.y, 0.45, 0.45))
 
     state.stats.kills += 1
@@ -724,6 +761,8 @@ def _advance_bosses(state: State, dt: float) -> None:
         state.fog_scale = min(state.fog_scale, phase.fog)
         if boss.memory.get("exposed", 0.0) > 0:
             boss.memory["exposed"] -= dt
+        if boss.memory.get("unflinch", 0.0) > 0:
+            boss.memory["unflinch"] -= dt
         fire_traits("tick", getattr(spec, "traits", ()), state, boss)
         if boss.memory.get("planted", 0.0) > 0:
             # Rooted while it channels something.  Set by the ``shrouds`` trait
@@ -935,6 +974,11 @@ def _advance_hazards(state: State, dt: float) -> None:
             alive.append(hazard)        # a telegraph, not a thing that catches
             continue
 
+        if hazard.kind == "wave":
+            _advance_wave(state, hazard)
+            alive.append(hazard)
+            continue
+
         hazard.x += hazard.vx * dt
         hazard.y += hazard.vy * dt
         moving = hazard.vx != 0.0 or hazard.vy != 0.0
@@ -979,6 +1023,24 @@ def _advance_hazards(state: State, dt: float) -> None:
             continue
         alive.append(hazard)
     state.hazards = alive
+
+
+def _advance_wave(state: State, hazard: Hazard) -> None:
+    """怒潮的一圈水波：往外長，掃到什麼清什麼。
+
+    半徑是從 ``life`` 反推的，所以動畫和判定共用同一個數字 —— 一個看起來已
+    經掃過你、實際上還沒判定到的水波，比沒有水波更糟。
+
+    ``hold`` 借來當擊退距離，``charges`` 借來當對王的傷害。兩個欄位在別的
+    hazard 上是別的意思，但 Hazard 的存在理由就是「差別只有名字和兩個數字」
+    —— 為了一個一次性的招式再開一張表，才是把這個設計拆掉。
+    """
+    from .effects import _kill_within
+
+    span = max(0.0, min(1.0, 1.0 - hazard.life / max(0.01, hazard.hold_life)))
+    hazard.reach = hazard.radius * (0.25 + 0.75 * span)
+    _kill_within(state, hazard.x, hazard.y, hazard.reach, "water",
+                 push=hazard.hold, boss=0)
 
 
 def _meteor_lands(state: State, hazard: Hazard) -> None:
@@ -1070,6 +1132,13 @@ def _collect_drops(state: State) -> None:
     for drop in state.drops:
         if g.distance(drop.x, drop.y, p.x, p.y) >= C.DROP_PICKUP_RADIUS:
             remaining.append(drop)
+            continue
+        if drop.heal > 0 and drop.sister:
+            state.meta.sister_hp = min(state.meta.max_sister_hp,
+                                       state.meta.sister_hp + drop.heal)
+            state.effects.append(Effect("mend", C.SISTER_X, C.SISTER_Y,
+                                        0.6, 0.6))
+            state.emit("sister_mended")
             continue
         if drop.heal > 0:
             stats = derive(state)

@@ -31,21 +31,22 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     # ── 一階 · 一點技能點 ───────────────────────────────────────────
     "bolt": SpellSpec(
         key="bolt", name="閃電", element="thunder", tier=1,
-        description="立刻劈下閃電，範圍內的敵人被重創並轟飛出去；"
+        description="範圍內的敵人被劈到只剩一滴血、護甲全碎，並被轟飛出去；"
                     "落點留下一片電焦的地面，走進去的只剩三成速度",
         cost=1, cooldown=16.0, duration=0.0,
         effect="smite",
         # 傷害 2 的時候，範圍內大部分的怪（3-5 滴血）被震開之後照樣活著，
         # 玩家看到的是「怪飛走了，沒人死」—— 那讀起來就是沒有傷害。3 讓輕的
         # 那一群當場清空，硬的那幾種還是要補第二下，跟提燈同一條規則。
-        params={"radius": 62.0, "damage": 4.0, "push": 210.0,
+        params={"radius": 62.0, "push": 210.0,
                 "boss": 6.0, "slow": 0.3, "slow_life": 4.5,
                 "slow_radius": 78.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(
         key="holy", name="聖光", element="light", tier=1,
-        description="八秒內照亮全場，隱形的現形，周圍的敵人每秒被灼燒",
+        description="八秒內照亮全場，隱形的現形，全場敵人畏光減速三成，"
+                    "周圍的敵人每秒被灼燒",
         cost=1, cooldown=22.0, duration=8.0,
         effect="reveal_all",
         params={"radius": 80.0, "burn": 0.5},
@@ -53,10 +54,12 @@ SPELLS: Final[dict[str, SpellSpec]] = {
 
     "tornado": SpellSpec(
         key="tornado", name="龍捲風", element="wind", tier=1,
-        description="朝面對的方向放出龍捲風，捲起沿路的怪一起帶走",
+        description="朝面對的方向放出三道呈扇形散開的龍捲風，"
+                    "捲起沿路的怪一起帶走",
         cost=1, cooldown=16.0, duration=5.0,
         effect="twister",
-        params={"speed": 150.0, "radius": 52.0, "hold": 2.5},
+        params={"speed": 150.0, "radius": 52.0, "hold": 2.5,
+                "spread": 0.38},
         colour=(150, 214, 200)),
 
     "cage": SpellSpec(
@@ -71,10 +74,10 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     "thunderclap": SpellSpec(
         key="thunderclap", name="雷鳴", element="thunder", tier=2,
         description="披上雷電護甲五秒，碰到你的人當場被電死；"
-                    "結束時把累積的電一次放掉",
+                    "五秒結束時把累積的電一次放掉，大範圍清空",
         cost=1, cooldown=26.0, duration=5.0,
         effect="storm_armour", needs_target=False,
-        params={"radius": 50.0, "burst_radius": 80.0, "boss": 18.0},
+        params={"radius": 50.0, "burst_radius": 140.0, "boss": 18.0},
         colour=(196, 168, 255)),
 
     "blessing": SpellSpec(
@@ -100,9 +103,10 @@ SPELLS: Final[dict[str, SpellSpec]] = {
 
     "riptide": SpellSpec(
         key="riptide", name="怒潮", element="water", tier=2,
-        description="腳下的水壓縮引爆，清空近處；之後全場起霧，敵人走得更慢",
+        description="三圈水波由內往外推開，掃過的全部清空；之後全場起霧，"
+                    "敵人走得更慢",
         cost=1, cooldown=28.0, duration=0.0,
         effect="surge_wave",
-        params={"radius": 50.0, "mist": 5.0, "push": 110.0, "boss": 20.0},
+        params={"radius": 170.0, "mist": 5.0, "push": 110.0, "boss": 20.0},
         colour=(96, 150, 220)),
 }

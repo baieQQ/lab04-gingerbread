@@ -535,6 +535,24 @@ class Board:
             if hazard.kind == "meteor":
                 self._meteor(hazard, pos, radius, ticks)
                 continue
+            if hazard.kind == "wave":
+                # 半徑讀 hazard.reach —— 那是規則這一幀真正清掉東西的範圍。
+                # 自己算一份的話，畫出來的圈遲早會跟判定對不上，而一個看起來
+                # 已經掃過你卻沒作用的水波，比沒有水波更糟。
+                span = max(2, int(hazard.reach))
+                self._fx.fill((0, 0, 0, 0))
+                fade = max(0.0, min(1.0, hazard.life / max(0.01,
+                                                           hazard.hold_life)))
+                for i in range(3):
+                    pygame.draw.circle(
+                        self._fx,
+                        _clamp_colour((150, 205, 255), (210 - i * 55) * fade),
+                        pos, max(1, span - i * 4), 2)
+                pygame.draw.circle(self._fx,
+                                   _clamp_colour((110, 168, 232), 46 * fade),
+                                   pos, span)
+                self.surface.blit(self._fx, (0, 0))
+                continue
             if hazard.kind == "twister":
                 # A stack of offset ellipses, each turning faster than the one
                 # below it: the shear is what reads as a funnel rather than as

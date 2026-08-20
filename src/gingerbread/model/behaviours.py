@@ -115,6 +115,13 @@ def _ground_drag(state: State, monster: Monster) -> float:
     ground, which is exactly what a puddle is.
     """
     slowest = C.MIST_SLOW if state.mist_ticks > 0 else 1.0
+    # 聖光照著的時候，全場的東西都畏光。
+    #
+    # 原本它只有「看得見」跟「周圍灼燒」兩件事，而看得見是被動的 —— 放完之後
+    # 那八秒裡，這個技能對眼前那一群怪沒有任何影響。畏光讓「亮著」本身變成一
+    # 個持續的優勢，也讓聖光和聖癒真正分開：一個壓制全場，一個保護一人。
+    if state.reveal_ticks > 0:
+        slowest = min(slowest, C.HOLY_SLOW)
     for pool in state.puddles:
         if g.distance(monster.x, monster.y, pool.x, pool.y) <= pool.radius:
             slowest = min(slowest, pool.slow)
