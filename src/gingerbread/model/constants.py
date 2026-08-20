@@ -144,6 +144,8 @@ WEAKNESS_WINDOW: Final = 3.0
 HOLY_SLOW: Final = 0.72
 #: 王被打斷之後，多久之內不會再被打斷。
 BOSS_FLINCH_GAP: Final = 2.0
+#: 接觸類技能（疾風、雷鳴）對王的傷害間隔。
+CONTACT_GAP: Final = 0.9
 
 #: Shot kinds that rebound off the walls instead of expiring at them, and leave
 #: a patch of fire wherever they finally stop.

@@ -204,3 +204,25 @@ ENDLESS_POOL: Final[tuple[tuple[str, float], ...]] = (
 ELITE_HP_FACTOR: Final = 2.0
 ELITE_SPEED_FACTOR: Final = 1.2
 ELITE_SUGAR_FACTOR: Final = 3
+
+#: 怪 -> 哪個技能是它的答案。
+#:
+#: 這些克制寫在 rules/behaviours 裡，玩家在場上不可能推導出來 —— 隱形怪被聖光
+#: 定住的那一秒，畫面上只是「它停了」，沒有東西告訴玩家那是因為光。圖鑑是這些
+#: 規則唯一能被讀到的地方，所以這張表存在的理由不是資料，是可見性。
+#:
+#: 只列「破解」等級的關係（讓某個機制整個失效），純數值加成的元素弱點不算 ——
+#: 那個已經有自己的欄位了。
+COUNTERS: Final[dict[str, str]] = {
+    "armoured": "閃電　護甲會被劈碎",
+    "mirror": "聖光　照著的時候正面也打得進去",
+    "faint": "聖光　不只現形，會被定在原地",
+    "digger": "龍捲風　鑽到地底也會被吸出來",
+    "bomber": "水牢／怒潮　火藥泡濕就炸不了",
+    "riser": "疾風　捲到場邊，爬起來也要走很久",
+    "splitter": "任何清場技　小的會補在原地，別在她旁邊打",
+    "brute": "打不退，只能繞開或用旋風捲走",
+    "mudling": "泥巴清不掉，只能繞",
+    "slinger": "走過去打斷它蓄力",
+    "archer": "走過去打斷它蓄力",
+}

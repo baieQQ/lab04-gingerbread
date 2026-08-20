@@ -77,7 +77,11 @@ SPELLS: Final[dict[str, SpellSpec]] = {
                     "五秒結束時把累積的電一次放掉，大範圍清空",
         cost=1, cooldown=26.0, duration=5.0,
         effect="storm_armour", needs_target=False,
-        params={"radius": 50.0, "burst_radius": 140.0, "boss": 18.0},
+        # 對王 2。接觸傷害有 0.9 秒的節流，五秒的護甲最多打進五下，再加上
+        # 結束時的放電 —— 18 的時候那是九十點，比第二到第六夜的每一隻王都多；
+        # 5 實測還是能對非弱點的王打掉 46（58 血的迷霧死神剩 12）。一個 26 秒
+        # 冷卻的技能不該一次帶走一隻王八成的血。
+        params={"radius": 50.0, "burst_radius": 140.0, "boss": 2.0},
         colour=(196, 168, 255)),
 
     "blessing": SpellSpec(

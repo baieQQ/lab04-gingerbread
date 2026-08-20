@@ -634,6 +634,22 @@ def _push(monster: Monster, from_x: float, from_y: float,
     monster.knock_speed = C.KNOCK_SPEED
 
 
+def _contact_ready(target: Monster, tag: str) -> bool:
+    """接觸傷害對王的節流閥。回傳 True 代表這一次算數，並開始冷卻。
+
+    ``_touch_player`` 是每一幀都會跑的 —— 只要身體還疊著，它就一直回報「碰
+    到了」。對小怪無所謂（第一下就死了），對王是災難：貼著它來回蹭，六點傷
+    害乘以每秒六十幀等於每秒三百六十，任何王都撐不過兩秒。
+
+    ``memory`` 上的一個倒數計時器就夠了。它由 ``_advance_bosses`` 每格遞減，
+    所以節流是照時間算的，不是照幀數 —— 換了更新率也還是同一個手感。
+    """
+    if target.memory.get(tag, 0.0) > 0:
+        return False
+    target.memory[tag] = C.CONTACT_GAP
+    return True
+
+
 def _touch_player(state: State, monster: Monster, spec) -> bool:
     """Resolve a monster bumping into Hansel.  Returns True when it happened."""
     p = state.player
@@ -671,7 +687,7 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
         monster.knockback = max(monster.knockback, push)
         monster.knock_speed = C.TORNADO_SPEED
         monster.stunned = max(monster.stunned, 0.5)
-        if monster in state.bosses:
+        if monster in state.bosses and _contact_ready(monster, "swept"):
             damage_target(state, monster,
                           int(spec.params.get("boss", 6)) if spec else 6,
                           element="wind", from_x=p.x, from_y=p.y)
@@ -685,6 +701,8 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
     # 怪等於什麼都沒發生，玩家看到的是自己被圍住、身上閃著紫光、然後照樣被
     # 推開。現在它是一堵會殺人的牆：站住不動就是這個技能的玩法。
     if p.aura > 0:
+        if monster in state.bosses and not _contact_ready(monster, "zapped"):
+            return True               # 還在冷卻，接觸算數但不再扣血
         p.aura_hits += 1.0
         spec = SPELL_TABLE.get("thunderclap")
         amount = (int(spec.params.get("boss", 18)) if spec and monster in
@@ -775,6 +793,9 @@ def _advance_bosses(state: State, dt: float) -> None:
             boss.memory["exposed"] -= dt
         if boss.memory.get("unflinch", 0.0) > 0:
             boss.memory["unflinch"] -= dt
+        for tag in ("swept", "zapped"):
+            if boss.memory.get(tag, 0.0) > 0:
+                boss.memory[tag] -= dt
         fire_traits("tick", getattr(spec, "traits", ()), state, boss)
         if boss.memory.get("planted", 0.0) > 0:
             # Rooted while it channels something.  Set by the ``shrouds`` trait

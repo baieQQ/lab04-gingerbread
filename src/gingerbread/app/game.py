@@ -47,6 +47,15 @@ MAX_STEPS_PER_FRAME = 5
 
 SAVE_PATH = Path.home() / ".gingerbread_save.json"
 
+#: 一個檔案裝所有人的存檔，鍵是暱稱。
+#:
+#: 分成很多個檔案的話，「有哪些存檔」這個問題就得靠掃資料夾回答，而資料夾裡
+#: 會有別人放的東西。一個 JSON 由這支程式全權負責，讀壞了就當作沒有存檔。
+PROFILES_PATH = Path.home() / ".gingerbread_profiles.json"
+
+#: 暱稱最長幾個字。長到會撐破選單的名字，是選單的問題不是玩家的問題。
+NAME_LIMIT = 10
+
 
 class Session:
     """Everything the scenes share: the run, the renderer, and the save file."""
@@ -75,6 +84,8 @@ class Session:
         #: Which night's opening card has already been shown, so it appears
         #: once per night and not once per frame.
         self.story_shown = 0
+        #: 目前的存檔名稱；空字串代表還沒選（走舊的單一存檔）。
+        self.profile = ""
         #: 已經播過的夜晚過場，避免重打同一夜時又看一次三分鐘的動畫。
         self.cutscenes_played: set[str] = set()
         #: Events heard since the shell last drained them.  ``apply_action``
@@ -252,6 +263,70 @@ class Session:
                                             meta.best_endless_kills)
         self._save()
 
+    # ── 存檔（以暱稱為單位）────────────────────────────────────────
+    def profiles(self) -> dict:
+        """所有存檔，讀壞了就當作沒有。"""
+        try:
+            raw = json.loads(PROFILES_PATH.read_text(encoding="utf-8"))
+            return raw if isinstance(raw, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def profile_names(self) -> list:
+        """存檔名稱，最近玩過的排前面。"""
+        rows = self.profiles()
+        return sorted(rows, key=lambda k: -int(rows[k].get("stamp", 0)))
+
+    def load_profile(self, name: str) -> None:
+        """切換到某個存檔；沒有這個名字就開一個新的。"""
+        self.profile = name[:NAME_LIMIT]
+        row = self.profiles().get(self.profile, {})
+        self.taught = {str(k) for k in row.get("taught", [])}
+        self.onboarding = bool(row.get("onboarding", True))
+        stars = [int(v) for v in row.get("night_stars", [])]
+        while len(stars) <= m.constants.CAMPAIGN_NIGHTS:
+            stars.append(0)
+        self.saved = m.Meta(
+            best_night=int(row.get("best_night", 0)),
+            best_endless_ticks=int(row.get("best_endless_ticks", 0)),
+            best_endless_kills=int(row.get("best_endless_kills", 0)),
+            difficulty=str(row.get("difficulty", m.constants.DEFAULT_DIFFICULTY)),
+        )
+        self.saved.night_stars = stars
+        self.state.meta.difficulty = self.saved.difficulty
+        self._save_profile()
+
+    def delete_profile(self, name: str) -> None:
+        rows = self.profiles()
+        rows.pop(name, None)
+        self._write_profiles(rows)
+
+    def _save_profile(self) -> None:
+        if not getattr(self, "profile", ""):
+            return
+        rows = self.profiles()
+        rows[self.profile] = {
+            "best_night": self.saved.best_night,
+            "best_endless_ticks": self.saved.best_endless_ticks,
+            "best_endless_kills": self.saved.best_endless_kills,
+            "night_stars": list(self.saved.night_stars),
+            "difficulty": self.saved.difficulty,
+            "taught": sorted(self.taught),
+            "onboarding": self.onboarding,
+            # 排序用的時間戳。用 tick 計數而不是時鐘，因為 model 那邊禁止讀
+            # 系統時間，而這裡沿用同一個習慣比較不會有人搞混。
+            "stamp": int(rows.get(self.profile, {}).get("stamp", 0)) + 1,
+        }
+        self._write_profiles(rows)
+
+    def _write_profiles(self, rows: dict) -> None:
+        try:
+            PROFILES_PATH.write_text(
+                json.dumps(rows, ensure_ascii=False, indent=1),
+                encoding="utf-8")
+        except OSError:
+            pass                      # a read-only home directory is not fatal
+
     def _load(self) -> m.Meta:
         """Read the record file, treating any problem as "no records yet".
 
@@ -271,6 +346,7 @@ class Session:
             return m.Meta()
 
     def _save(self) -> None:
+        self._save_profile()
         try:
             SAVE_PATH.write_text(json.dumps({
                 "best_night": self.saved.best_night,
@@ -400,10 +476,22 @@ class Game:
                             self._toggle_pause()
 
             self._clear_bars()
-            self.stack.frame(dt, events)
-            self.session.cast_from_keys(self.ui.keys)
-            self.audio.consume(self.session.drain())
-            self.audio.music(self.session.music_key())
+            try:
+                self.stack.frame(dt, events)
+                self.session.cast_from_keys(self.ui.keys)
+                self.audio.consume(self.session.drain())
+                self.audio.music(self.session.music_key())
+            except Exception:                          # noqa: BLE001
+                # 一格畫壞了不該讓整個遊戲消失。
+                #
+                # 未捕捉的例外會讓視窗直接關掉 —— 玩家看到的是「遊戲當了」，
+                # 而我們拿到的是「沒有任何線索」。擺攤的時候更糟：下一個人
+                # 走過來，畫面是空的。
+                #
+                # 印出完整 traceback（開發的人看得到），畫面上留一行給玩家，
+                # 然後繼續跑。真的每一幀都壞，起碼壞得看得見。
+                self._crash()
+            self._draw_crash()
             pygame.display.flip()
             await asyncio.sleep(0)          # required for the web build
         pygame.quit()
@@ -422,6 +510,41 @@ class Game:
         path = folder / f"糖果屋截圖-{n:02d}.png"
         pygame.image.save(self.window, str(path))
         print(f"[gingerbread] screenshot saved to {path}")
+
+    #: 最近一次當掉的摘要，畫在畫面上讓人抄下來。
+    _last_crash: str = ""
+    _crash_count: int = 0
+
+    def _crash(self) -> None:
+        """記下這一格的例外，印出來，然後讓遊戲繼續跑。"""
+        import traceback
+
+        self._crash_count += 1
+        lines = traceback.format_exc().strip().split("\n")
+        self._last_crash = lines[-1][:96] if lines else "unknown"
+        # 前三次印完整的；再多就只印一行，否則一個每幀都炸的錯誤會把終端機
+        # 洗到看不見最早的那一次 —— 而最早的那一次才是原因。
+        if self._crash_count <= 3:
+            traceback.print_exc()
+        else:
+            print(f"[gingerbread] 又當了一次（第 {self._crash_count} 次）："
+                  f"{self._last_crash}")
+
+    def _draw_crash(self) -> None:
+        """把最近一次的錯誤畫在畫面最上面。"""
+        if not self._last_crash:
+            return
+        book = self.book
+        text = f"當掉了（{self._crash_count}）：{self._last_crash}"
+        try:
+            label = book.render(text, "small", (255, 120, 120))
+        except Exception:                              # noqa: BLE001
+            return
+        strip = pygame.Surface((self.canvas.get_width(),
+                                label.get_height() + 8))
+        strip.fill((40, 8, 12))
+        self.canvas.blit(strip, (0, 0))
+        self.canvas.blit(label, (6, 4))
 
     def _clear_bars(self) -> None:
         """Repaint only the letterbox, never the playfield.

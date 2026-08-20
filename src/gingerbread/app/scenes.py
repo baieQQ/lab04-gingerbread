@@ -22,6 +22,7 @@ import pygame
 
 from .. import model as m
 from ..model.content import BEATS, BOSSES, ENDLESS_BEAT, EVENTS, MONSTERS
+from ..model.content.monsters import COUNTERS
 from ..model.content import newcomers
 from ..model.content import SPELLS as SPELL_TABLE
 from ..model.content import stage_for
@@ -1969,7 +1970,7 @@ class CodexScene(Scene):
             ui.text(title, (ui.s(MID - 320), ui.s(y)), "body", P.BONE)
             ui.text(stats, (ui.s(MID - 150), ui.s(y + 2)), "small", P.BONE_DIM)
             if note:
-                ui.text(ui.truncate(note, ui.s(420), "small"),
+                ui.text(ui.truncate(note, ui.s(560), "small"),
                         (ui.s(MID - 150), ui.s(y + 24)), "small", P.EMBER_DARK)
             y += 56
 
@@ -2000,8 +2001,11 @@ class CodexScene(Scene):
         stats = (f"血 {spec.hp}　速 {spec.speed:.0f}　糖霜 {spec.sugar}"
                  + ("　打不退" if not spec.knockable else "")
                  + (f"　弱點 {weak}" if weak else ""))
-        return (spec.name, stats, self._mechanics(spec),
-                f"monster.{spec.key}")
+        note = self._mechanics(spec)
+        beat = COUNTERS.get(spec.key)
+        if beat:
+            note = f"{note}　·　剋星：{beat}" if note else f"剋星：{beat}"
+        return (spec.name, stats, note, f"monster.{spec.key}")
 
     def _boss_row(self, spec) -> tuple[str, str, str]:
         weak = ELEMENTS.get(spec.weakness or "", {}).get("name", "沒有單一解答")
