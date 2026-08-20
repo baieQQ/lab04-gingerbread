@@ -31,16 +31,16 @@ SPELLS: Final[dict[str, SpellSpec]] = {
     # ── 一階 · 一點技能點 ───────────────────────────────────────────
     "bolt": SpellSpec(
         key="bolt", name="閃電", element="thunder", tier=1,
-        description="立刻劈下閃電，把周圍的敵人狠狠震開，"
-                    "落點會留下一片電焦的地面，走進去的都變慢",
+        description="立刻劈下閃電，範圍內的敵人被重創並轟飛出去；"
+                    "落點留下一片電焦的地面，走進去的只剩三成速度",
         cost=1, cooldown=16.0, duration=0.0,
         effect="smite",
         # 傷害 2 的時候，範圍內大部分的怪（3-5 滴血）被震開之後照樣活著，
         # 玩家看到的是「怪飛走了，沒人死」—— 那讀起來就是沒有傷害。3 讓輕的
         # 那一群當場清空，硬的那幾種還是要補第二下，跟提燈同一條規則。
-        params={"radius": 54.0, "damage": 3.0, "push": 165.0,
-                "boss": 5.0, "slow": 0.4, "slow_life": 3.5,
-                "slow_radius": 66.0},
+        params={"radius": 62.0, "damage": 4.0, "push": 210.0,
+                "boss": 6.0, "slow": 0.3, "slow_life": 4.5,
+                "slow_radius": 78.0},
         colour=(180, 140, 255)),
 
     "holy": SpellSpec(
@@ -92,7 +92,10 @@ SPELLS: Final[dict[str, SpellSpec]] = {
                     "期間照樣可以揮燈",
         cost=1, cooldown=24.0, duration=6.0,
         effect="gale", needs_target=False,
-        params={"speed": 2.4, "push": 460.0, "boss": 6.0},
+        # 2.4 倍速下，玩家從怪物旁邊呼嘯而過但一個都碰不到 —— 判定圈只有
+        # 漢賽爾本人那麼大，而他一幀跑掉的距離比那個圈還寬。降速，並且在旋
+        # 風狀態下把判定圈放大到 34：那才是一道旋風該有的作用範圍。
+        params={"speed": 1.9, "push": 460.0, "boss": 6.0, "sweep": 34.0},
         colour=(178, 232, 218)),
 
     "riptide": SpellSpec(

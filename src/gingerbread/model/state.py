@@ -94,6 +94,14 @@ class Meta:
     #: upgrade key -> how many times it has been bought.  See content/upgrades.
     upgrades: dict[str, int] = field(default_factory=dict)
 
+    #: 每一夜拿到幾顆星（0 = 還沒過）。索引就是夜數。
+    #:
+    #: 單夜的評分只在天亮那一頁出現一次，看完就沒了 —— 玩家沒有任何地方能
+    #: 看到「我這一輪整體打得怎樣」。星等把七次評分留下來，變成一張可以回頭
+    #: 看、可以想再刷一次的成績單。
+    night_stars: list[int] = field(
+        default_factory=lambda: [0] * (C.CAMPAIGN_NIGHTS + 1))
+
     #: Sugar already paid out by each night, indexed by night number.  A list
     #: rather than a dict so the snapshot stays JSON-safe without key coercion.
     #: See ``constants.NIGHT_SUGAR_BUDGET`` for why this is tracked at all.
@@ -132,6 +140,20 @@ class Meta:
     def level(self, key: str) -> int:
         """How many times ``key`` has been bought.  Absent means zero."""
         return self.upgrades.get(key, 0)
+
+    def award_stars(self, night: int, stars: int) -> None:
+        """記下這一夜的星等，只往上不往下。
+
+        重打一夜是為了拿更好的成績，不是為了把已經拿到的弄丟 —— 一次失手就
+        把三顆星洗成一顆，玩家學到的是不要再挑戰。
+        """
+        while len(self.night_stars) <= night:
+            self.night_stars.append(0)
+        self.night_stars[night] = max(self.night_stars[night], int(stars))
+
+    @property
+    def total_stars(self) -> int:
+        return sum(self.night_stars)
 
     def sugar_left_tonight(self, night: int) -> int:
         """How much more sugar this night may still drop.

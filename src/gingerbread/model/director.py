@@ -203,6 +203,10 @@ class CampaignDirector:
             return
         state.stats.sugar_left = sum(d.value for d in state.drops if not d.fake)
         state.meta.best_night = max(state.meta.best_night, state.meta.night)
+        from .score import grade_night, stars_for
+
+        state.meta.award_stars(state.meta.night,
+                               stars_for(grade_night(state).grade))
         if state.meta.night >= C.CAMPAIGN_NIGHTS:
             state.phase = Phase.VICTORY
             state.emit("victory")

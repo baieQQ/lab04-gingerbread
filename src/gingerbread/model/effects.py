@@ -101,6 +101,9 @@ def smite(state: State, spec) -> None:
         if g.distance(target.x, target.y, p.x, p.y) > radius:
             continue
         shove(target, p.x, p.y, push)
+        # 快，才讀得出來是被「震開」。一般擊退是 150 px/s，165 像素要飄一秒
+        # 多 —— 那看起來像怪物自己慢慢走開，不像挨了一道雷。
+        target.knock_speed = C.BOLT_SPEED
         amount = boss_damage if target in state.bosses else damage
         if amount > 0:
             damage_target(state, target, amount, element=spec.element,

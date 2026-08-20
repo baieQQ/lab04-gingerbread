@@ -122,3 +122,14 @@ def grade_night(state: State) -> Report:
         weakest = None                      # nothing worth pointing at
     return Report(_band(points / out_of if out_of else 1.0),
                   points, out_of, tuple(lines), weakest)
+
+
+#: 等第 -> 星數。三顆是「這一夜沒有什麼可以再做得更好」，一顆是「過了」。
+GRADE_STARS: Final[dict[str, int]] = {
+    "S": 3, "A": 3, "B": 2, "C": 1, "D": 1,
+}
+
+
+def stars_for(grade: str) -> int:
+    """一份評等值幾顆星。認不得的等第給一顆 —— 過了就是過了。"""
+    return GRADE_STARS.get(grade, 1)

@@ -107,17 +107,19 @@ class MenuScene(Scene):
             self.g.assets._images[key] = scaled
         ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
                                  (target[1] - size[1]) // 2))
-        # 選單的字要壓在上面才讀得到，但別把畫蓋掉 —— 只暗一層。
-        ui.veil(120)
+        # 字壓在畫上面就會糊。壓到 158 之後對比夠了，畫也還在 —— 主視覺是
+        # 背景，不是要跟文字搶注意力的東西。
+        ui.veil(158)
 
         col = _col(ui, MID - 170, 196, 340, 220, gap=12)
         if ui.button("campaign", col.slot(ui.s(60)), "七夜",
                      "撐過七個夜晚，每一夜都有牠們的頭目"):
             self._go(app, m.Mode.CAMPAIGN)
 
-        if ui.button("endless", col.slot(ui.s(60)), "無盡",
-                     "牠們不會停。撐到你倒下為止"):
-            self._go(app, m.Mode.ENDLESS)
+        # 無盡還沒調到能見人的程度，先關起來 —— 一個做不完的模式擺在那裡讓
+        # 人點下去，比暫時不給它更傷。
+        ui.button("endless", col.slot(ui.s(60)), "無盡",
+                  "敬請期待", enabled=False)
         if ui.button("codex", col.slot(ui.s(42)), "圖鑑", "看看你會遇到什麼"):
             app.push(CodexScene(self.g))
         on = self.g.onboarding
@@ -541,8 +543,11 @@ class MapScene(Scene):
         ui.veil(252)
         self._scenery(ui)
         ui.text("七夜", (ui.s(MID), ui.s(52)), "title", P.EMBER, "center")
-        ui.text("從村子的廣場，一路走回那間屋子。",
-                (ui.s(MID), ui.s(88)), "small", P.BONE_DIM, "center")
+        total = self.g.saved.total_stars
+        cap = 3 * m.constants.CAMPAIGN_NIGHTS
+        ui.text(f"從村子的廣場，一路走回那間屋子。　★ {total} / {cap}",
+                (ui.s(MID), ui.s(88)), "small",
+                P.SUGAR if total else P.BONE_DIM, "center")
 
         drawn = min(1.0, self.t / self.DRAW_IN)
         self._landmarks(ui, night)
@@ -673,6 +678,23 @@ class MapScene(Scene):
         name = boss.name if (done or here) else "？？？"
         ui.text(name, (pos[0], pos[1] + ui.s(26)), "tiny",
                 P.BOSS if (done or here) else P.MUTED, "center")
+        self._stars(ui, number, pos)
+
+    def _stars(self, ui: UI, night: int, pos) -> None:
+        """這一夜拿到幾顆星。沒過的節點不畫 —— 三顆空星等於在說「你欠著」。"""
+        got = self.g.saved.night_stars[night] if night < len(
+            self.g.saved.night_stars) else 0
+        if got <= 0:
+            return
+        step = ui.s(11)
+        left = pos[0] - step
+        for i in range(3):
+            colour = P.SUGAR if i < got else P.LINE
+            cx, cy = left + i * step, pos[1] + ui.s(40)
+            pygame.draw.polygon(ui.surface, colour, [
+                (cx, cy - ui.s(4)), (cx + ui.s(4), cy + ui.s(3)),
+                (cx - ui.s(4), cy - ui.s(1)), (cx + ui.s(4), cy - ui.s(1)),
+                (cx - ui.s(4), cy + ui.s(3))])
 
     #: How tall a boss stands over its node, in layout units.
     FACE = 58
@@ -1761,7 +1783,11 @@ class ResultScene(Scene):
         # A scrim only under the words.  White text on a still-visible forest
         # is unreadable, and veiling the whole screen to fix that would throw
         # away the frame we just spent two seconds keeping.
-        scrim = ui.box(MID - 250, 96, 500, 330)
+        # 高度照實際內容算出來，不是寫死的 330 —— 敗北有三顆按鈕、勝利只有
+        # 兩顆，而 330 只夠蓋到第二顆的一半，第三顆是浮在畫面上的。
+        buttons = 2 if state.phase is m.Phase.VICTORY else 3
+        tall = 200 + buttons * 58
+        scrim = ui.box(MID - 250, 96, 500, tall)
         ui.panel(scrim, P.with_alpha(P.INK[:3], 216), P.LINE)
 
         ui.text("第一個冬天過去了" if won else "葛蕾特不見了",
@@ -1778,7 +1804,7 @@ class ResultScene(Scene):
             line = "黑暗裡有很多雙手。你沒能全部擋下來。"
         ui.text(line, (ui.s(MID), ui.s(198)), "body", P.BONE_DIM, "center")
 
-        col = _col(ui, MID - 150, 268, 300, 190, gap=12)
+        col = _col(ui, MID - 160, 262, 320, 200, gap=10)
         if won:
             if ui.button("again", col.slot(ui.s(46)), "再玩一次"):
                 self.g.restart()
@@ -1815,22 +1841,30 @@ class PauseScene(Scene):
         ui.veil(200)
         ui.text("暫停", (ui.s(MID), ui.s(130)), "big", P.EMBER, "center")
 
-        col = _col(ui, MID - 130, 190, 260, 290, gap=10)
-        if ui.button("resume", col.slot(ui.s(44)), "繼續"):
+        col = _col(ui, MID - 140, 176, 280, 350, gap=7)
+        if ui.button("resume", col.slot(ui.s(42)), "繼續"):
             app.pop()
-        if ui.button("codex", col.slot(ui.s(44)), "圖鑑"):
+        # 打壞了就重來，不用先輸掉。原本只能一路撐到葛蕾特被抓走才有這個
+        # 選項，所以一場已經崩掉的夜晚還得花一分鐘把它輸完。
+        if ui.button("retry", col.slot(ui.s(42)), "重新開始這一夜",
+                     "保留糖霜、升級和技能"):
+            self.game.session.retry_night()
+            while app.scenes and not isinstance(app.top, PlayScene):
+                app.pop()
+            return
+        if ui.button("codex", col.slot(ui.s(42)), "圖鑑"):
             app.push(CodexScene(self.g))
         on = self.g.onboarding
-        if ui.button("guide", col.slot(ui.s(44)),
+        if ui.button("guide", col.slot(ui.s(42)),
                      f"新手引導：{'開' if on else '關'}",
                      "怪物體驗關與操作說明"):
             self.g.set_onboarding(not on)
-        if ui.button("full", col.slot(ui.s(44)),
+        if ui.button("full", col.slot(ui.s(42)),
                      "切換視窗" if self.game.fullscreen else "切換全螢幕", "F11"):
             self.game.toggle_fullscreen()
-        if ui.button("menu", col.slot(ui.s(44)), "回主選單", "這一場會結束"):
+        if ui.button("menu", col.slot(ui.s(42)), "回主選單", "這一場會結束"):
             self.g.to_menu(app)
-        if ui.button("quit", col.slot(ui.s(44)), "離開遊戲"):
+        if ui.button("quit", col.slot(ui.s(42)), "離開遊戲"):
             self.game.running = False
 
         ui.text("Esc 也可以直接關掉這個選單",

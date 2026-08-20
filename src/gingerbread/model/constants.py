@@ -160,6 +160,8 @@ WARD_PUSH: Final = 150.0
 KNOCK_SPEED: Final = 150.0
 #: 疾風把人捲飛的速度。460 像素用 150 要飄三秒，讀起來像卡住。
 TORNADO_SPEED: Final = 620.0
+#: 閃電把人震開的速度。要像衝擊波，不像走開。
+BOLT_SPEED: Final = 430.0
 #: Damage multiplier while a boss is in that open state.
 EXPOSED_MULTIPLIER: Final = 2.0
 

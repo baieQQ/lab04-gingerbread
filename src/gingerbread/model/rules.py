@@ -590,8 +590,12 @@ def _touch_player(state: State, monster: Monster, spec) -> bool:
     p = state.player
     if p.downed > 0:
         return False
+    reach = C.PLAYER_RADIUS
+    if p.haste > 0:
+        gale = SPELL_TABLE.get("windrun")
+        reach = float(gale.params.get("sweep", 34.0)) if gale else 34.0
     if not g.circles_touch(monster.x, monster.y, spec.radius,
-                           p.x, p.y, C.PLAYER_RADIUS):
+                           p.x, p.y, reach):
         return False
 
     # 疾風 — 漢賽爾本人變成一道旋風。
