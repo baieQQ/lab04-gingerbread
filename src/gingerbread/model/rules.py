@@ -417,6 +417,7 @@ def _kill(state: State, target: Monster, *, by_lantern: bool) -> None:
     # Capped where the sugar is *created* rather than where it is picked up, so
     # what the player sees on the ground is always what they can still earn —
     # a crystal that pays nothing would read as a bug, not as a limit.
+    payout = int(round(payout * float(state.meta.dials["sugar"])))
     payout = min(payout, state.meta.sugar_left_tonight(state.meta.night))
     if payout > 0:
         state.meta.bank_night_sugar(state.meta.night, payout)
@@ -1245,7 +1246,8 @@ def make_monster(state: State, key: str, x: float, y: float, *,
     """Build one monster from its spec, applying the elite multipliers."""
     spec = MONSTERS.get(key) or MONSTERS["villager"]
     hp = int(spec.hp * (ELITE_HP_FACTOR if elite else 1.0))
-    speed = spec.speed * (ELITE_SPEED_FACTOR if elite else 1.0)
+    speed = (spec.speed * (ELITE_SPEED_FACTOR if elite else 1.0)
+             * float(state.meta.dials["monster_speed"]))
     monster = Monster(spec=key, x=x, y=y, hp=hp, speed=speed,
                       wake=wake, elite=elite)
     escalate_speed(monster, state.elapsed)

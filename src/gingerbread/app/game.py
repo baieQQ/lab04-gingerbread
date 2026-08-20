@@ -156,6 +156,12 @@ class Session:
         if self.state.phase is not state.phase:
             self._remember()
 
+    def set_difficulty(self, key: str) -> None:
+        """記住難度，並套用到還沒開始的這一局。"""
+        self.saved.difficulty = key
+        self.state.meta.difficulty = key
+        self._remember()
+
     def set_onboarding(self, on: bool) -> None:
         """Turn the walkthroughs on or off, and remember it across runs."""
         if self.onboarding != on:

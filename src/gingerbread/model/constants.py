@@ -225,6 +225,44 @@ UPGRADE_PRICE_STEP: Final = 2
 
 # ── seven-nights campaign ────────────────────────────────────────────
 CAMPAIGN_NIGHTS: Final = 7
+
+#: 難度。四段，調的是**壓力**，不是漢賽爾。
+#:
+#: 刻意不動玩家的移動速度。角色的手感是整款遊戲裡最不該隨難度改變的東西 ——
+#: 一個從簡單升上一般的玩家，如果連走路都要重新學，那他學會的東西就沒有帶
+#: 上去。所以四段共用同一個漢賽爾，變的是他面對的世界。
+#:
+#: 每一欄各自負責一種「難」：
+#:   monster_speed —— 反應時間。撐不住的玩家缺的通常不是手速，是看到之後
+#:                    還來不及做決定。
+#:   spawn_gap     —— 同時要處理幾件事。這是最有效的一根槓桿。
+#:   sister_bonus  —— 容錯額度。允許犯幾次錯才結束這一局。
+#:   light         —— 資訊量。看得到就不算被偷襲。
+#:   sugar         —— 只有困難有加成。簡單不該同時也比較好賺，否則它會變成
+#:                    最划算的練功模式，而不是給打不過的人的一條路。
+DIFFICULTIES: Final = (
+    ("gentle", "超簡單", "給第一次拿起鍵盤的人",
+     {"monster_speed": 0.70, "spawn_gap": 1.45, "sister_bonus": 4,
+      "light": 1.30, "sugar": 1.00}),
+    ("easy", "簡單", "想把七夜走完，但不想被逼",
+     {"monster_speed": 0.85, "spawn_gap": 1.20, "sister_bonus": 2,
+      "light": 1.15, "sugar": 1.00}),
+    ("normal", "一般", "設計時預設的樣子",
+     {"monster_speed": 1.00, "spawn_gap": 1.00, "sister_bonus": 0,
+      "light": 1.00, "sugar": 1.00}),
+    ("hard", "困難", "怪更快、來得更密、看得更少",
+     {"monster_speed": 1.15, "spawn_gap": 0.85, "sister_bonus": -2,
+      "light": 0.90, "sugar": 1.25}),
+)
+
+#: key -> 那一段的數值。
+DIFFICULTY_TABLE: Final = {key: values for key, _n, _d, values in DIFFICULTIES}
+DEFAULT_DIFFICULTY: Final = "normal"
+
+
+def difficulty(key: str) -> dict:
+    """回傳一段難度的數值；認不得的名字退回一般。"""
+    return DIFFICULTY_TABLE.get(key, DIFFICULTY_TABLE[DEFAULT_DIFFICULTY])
 SPELL_UNLOCK_NIGHT: Final = 3
 
 #: The most sugar a given night will ever pay out, across every attempt at it.

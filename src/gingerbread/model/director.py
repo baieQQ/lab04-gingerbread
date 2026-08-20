@@ -130,6 +130,7 @@ class CampaignDirector:
         stage = stage_for(state.meta.night)
         seconds = (stage.spawn_interval if stage.spawn_interval is not None
                    else max(1.4, 4.2 - state.meta.night * 0.28))
+        seconds *= float(state.meta.dials["spawn_gap"])
         interval = to_ticks(seconds)
         state.spawn_ticks += 1
         if state.spawn_ticks >= interval and state.ticks_elapsed > to_ticks(3.0):
@@ -310,7 +311,8 @@ class EndlessDirector:
         minutes = state.ticks_elapsed * C.FIXED_DT / 60.0
         opening = (C.ENDLESS_OPENING_INTERVAL if minutes < 1.0
                    else C.ENDLESS_BASE_INTERVAL)
-        seconds = max(C.ENDLESS_MIN_INTERVAL, opening / self.pressure(minutes))
+        seconds = (max(C.ENDLESS_MIN_INTERVAL, opening / self.pressure(minutes))
+                   * float(state.meta.dials["spawn_gap"]))
         return max(1, to_ticks(seconds))
 
     def _pool(self, state: State) -> list[tuple[str, float]]:

@@ -80,9 +80,11 @@ def derive(state: "State") -> Derived:
     haste = (1.0 + totals.get("swing_speed_pct", 0.0))
     cooldown = C.SWING_COOLDOWN / max(0.2, haste)
 
-    light = (C.START_LIGHT
-             * (1.0 + totals.get("light_pct", 0.0))
-             + totals.get("light", 0.0)) * state.light_scale * state.fog_scale
+    light = ((C.START_LIGHT
+              * (1.0 + totals.get("light_pct", 0.0))
+              + totals.get("light", 0.0))
+             * float(state.meta.dials["light"])
+             * state.light_scale * state.fog_scale)
     if state.player.doused > 0:
         light *= C.DOUSE_FACTOR
     if state.player.downed > 0:

@@ -69,6 +69,15 @@ class Meta:
     """
 
     mode: Mode = Mode.CAMPAIGN
+    #: 難度代號，見 constants.DIFFICULTIES。存進 meta 而不是存在殼層，因為
+    #: 快照要看得到它 —— 一個看不見的難度會讓兩局完全不同的遊戲在無頭比對裡
+    #: 長得一模一樣。
+    difficulty: str = C.DEFAULT_DIFFICULTY
+
+    @property
+    def dials(self) -> dict:
+        """這一局的難度數值。"""
+        return C.difficulty(self.difficulty)
 
     #: Testing switch: nothing can hurt Hansel or Gretel.  It lives on the run
     #: rather than on the night so a night can be replayed with it on, and it is
@@ -153,8 +162,9 @@ class Meta:
         Endless has no dawn to heal at, so its allowance has to be larger — see
         ``constants.ENDLESS_SISTER_HP`` for the measurement behind that.
         """
-        return (C.ENDLESS_SISTER_HP if self.mode is Mode.ENDLESS
+        base = (C.ENDLESS_SISTER_HP if self.mode is Mode.ENDLESS
                 else C.SISTER_MAX_HP)
+        return max(2, base + int(self.dials["sister_bonus"]))
 
     def clear_nightly(self) -> None:
         """Drop the day-only upgrades.

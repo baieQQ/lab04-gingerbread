@@ -81,10 +81,34 @@ class MenuScene(Scene):
                  else PrologueScene(self.g))
 
     def update(self, app: SceneStack, ui: UI, dt: float) -> None:
-        ui.veil(252)
+        self._backdrop(ui)
         ui.text("糖果屋之後", (ui.s(MID), ui.s(92)), "huge", P.EMBER, "center")
         ui.text("這一次，換他來保護妹妹。",
                 (ui.s(MID), ui.s(142)), "body", P.BONE_DIM, "center")
+
+    def _backdrop(self, ui: UI) -> None:
+        """主視覺鋪滿，字壓在上面；沒有圖就退回原本的純色。
+
+        照 cover 的方式裁切而不是拉伸 —— 主視覺的構圖是刻意的（提燈在左下、
+        糖果屋在右上），拉扁它等於把那個構圖丟掉。
+        """
+        art = self.g.assets.image("title.menu")
+        if art is None:
+            ui.veil(252)
+            return
+        target = ui.surface.get_size()
+        aw, ah = art.get_size()
+        k = max(target[0] / aw, target[1] / ah)
+        size = (max(1, int(aw * k)), max(1, int(ah * k)))
+        key = f"title.menu#cover{size[0]}x{size[1]}"
+        scaled = self.g.assets._images.get(key)
+        if scaled is None:
+            scaled = pygame.transform.smoothscale(art, size)
+            self.g.assets._images[key] = scaled
+        ui.surface.blit(scaled, ((target[0] - size[0]) // 2,
+                                 (target[1] - size[1]) // 2))
+        # 選單的字要壓在上面才讀得到，但別把畫蓋掉 —— 只暗一層。
+        ui.veil(120)
 
         col = _col(ui, MID - 170, 196, 340, 220, gap=12)
         if ui.button("campaign", col.slot(ui.s(60)), "七夜",
@@ -102,14 +126,38 @@ class MenuScene(Scene):
                      "操作說明與怪物體驗關"):
             self.g.set_onboarding(not on)
 
+        self._difficulty(ui)
+
         meta = self.g.saved
         best = f"最佳：第 {meta.best_night} 夜"
         if meta.best_endless_ticks:
             seconds = int(meta.best_endless_ticks * m.FIXED_DT)
             best += f"　·　無盡 {seconds // 60}:{seconds % 60:02d}"
-        ui.text(best, (ui.s(MID), ui.s(442)), "small", P.MUTED, "center")
+        # 原本在 442，正好壓在「新手引導」那顆按鈕的下緣上。
+        ui.text(best, (ui.s(MID), ui.s(566)), "small", P.MUTED, "center")
         ui.text("方向鍵或滑鼠選擇　·　Enter 確定　·　F11 全螢幕",
-                (ui.s(MID), ui.s(608)), "small", P.MUTED, "center")
+                (ui.s(MID), ui.s(614)), "small", P.MUTED, "center")
+
+    def _difficulty(self, ui: UI) -> None:
+        """四段難度，橫排在選單下面。
+
+        調的是壓力不是漢賽爾 —— 四段共用同一個角色手感，變的是怪走多快、來得
+        多密、看得多遠、還有葛蕾特能挨幾下。從簡單升上一般的玩家，學會的東西
+        帶得上去。
+        """
+        current = self.g.saved.difficulty
+        ui.text("難度", (ui.s(MID - 170), ui.s(452)), "small", P.ARCANE)
+        cells = Stack.split(ui.box(MID - 170, 470, 340, 40), 4, gap=ui.s(6))
+        for (key, name, _note, _dials), cell in zip(m.constants.DIFFICULTIES,
+                                                    cells):
+            if ui.button(f"diff:{key}", cell, name,
+                         selected=key == current, size="small"):
+                self.g.set_difficulty(key)
+        for key, _n, note, _d in m.constants.DIFFICULTIES:
+            if key == current:
+                ui.text(note, (ui.s(MID), ui.s(524)), "small",
+                        P.BONE_DIM, "center")
+                break
 
 
 # ── tutorial ─────────────────────────────────────────────────────────
