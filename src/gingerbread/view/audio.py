@@ -86,6 +86,24 @@ EVENT_SOUNDS: Final[dict[str, str]] = {
     "lost": "scream",
     "bought:": "buy",
     "learned:": "buy",
+
+    # ── 技能自己的聲音 ───────────────────────────────────────────
+    #
+    # 這幾條原本是空的：閃電把整片護甲打碎、水牢炸開、雷鳴結束放電、疾風把人
+    # 撞飛 —— 每一個都是技能最有感的那一下，而它們全部只發得出施法的 cast 聲。
+    # 手上按了一個大招、耳朵聽到的跟按小招一樣，那個技能就少了一半。
+    "sundered": "burst",              # 閃電：護甲全碎
+    "thunderclap": "burst",           # 雷鳴：結束時的放電
+    "cage_burst": "surge",            # 水牢：五秒到了
+    "swept": "dash",                  # 疾風：撞上人
+    "mended": "revive",               # 聖癒：回血
+    "sister_mended": "revive",
+    "uprooted:": "surface",           # 龍捲風把埋著的東西拔出來
+    "cooled:": "douse",               # 灰燼灶鬼被澆熄，戰鬥才開始
+    "clung": "pinned",
+    "stolen:": "sugar",
+    "fizzled": "guard_hit",
+    "decoy": "event",
 }
 
 #: Which music track belongs to which situation.  Looked up by the shell.
