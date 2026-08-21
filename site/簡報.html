@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>糖果屋之後 · 三分鐘簡報</title>
+<style>
+*{box-sizing:border-box;margin:0}
+:root{--void:#06050b;--panel:#15121f;--line:#241e36;--bone:#f0e5cd;
+      --dim:#b8a98b;--muted:#6a6383;--ember:#f2a93b;--arcane:#8e6bd6}
+html,body{height:100%;background:var(--void);color:var(--bone);
+  font-family:"PingFang TC","Hiragino Sans GB","Noto Sans TC",system-ui,sans-serif;
+  overflow:hidden}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;
+  padding:6vh 8vw;gap:2.4vh}
+.slide.on{display:flex}
+.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  z-index:-2}
+.dimmer{position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(180deg,rgba(6,5,11,.62),rgba(6,5,11,.78))}
+.kicker{color:var(--arcane);letter-spacing:.35em;font-size:1.7vh}
+h1{color:var(--ember);font-size:9.5vh;letter-spacing:.12em;font-weight:600;
+   text-shadow:0 0 50px rgba(242,169,59,.3)}
+h2{color:var(--ember);font-size:5.4vh;letter-spacing:.08em;font-weight:600}
+.tagline{font-size:3.4vh;letter-spacing:.1em}
+.big{font-size:3.6vh;line-height:1.8}
+.big b{color:var(--ember);font-weight:600}
+.dim{color:var(--dim);font-size:2.4vh;line-height:1.9}
+.muted{color:var(--muted);font-size:2vh;letter-spacing:.12em}
+.row{display:flex;gap:2.2vw;align-items:stretch;justify-content:center;
+     width:100%}
+.card{flex:1;max-width:26vw;background:rgba(21,18,31,.88);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card img{width:100%;display:block}
+.card p{padding:1.6vh 1vh;font-size:2.4vh}
+.card p b{color:var(--ember)}
+.bosses{display:flex;gap:2.6vw;justify-content:center;align-items:flex-end}
+.bosses figure{display:flex;flex-direction:column;align-items:center;gap:1vh}
+.bosses img{height:15vh;image-rendering:pixelated;
+  filter:drop-shadow(0 0 18px rgba(0,0,0,.8))}
+.bosses figcaption{color:var(--dim);font-size:1.8vh}
+.stats{display:flex;gap:4vw;justify-content:center}
+.stat{background:rgba(21,18,31,.88);border:1px solid var(--line);
+  border-radius:12px;padding:3.4vh 3.4vw;min-width:20vw}
+.stat .n{color:var(--ember);font-size:7.5vh;font-weight:600}
+.stat .t{color:var(--dim);font-size:2.2vh;margin-top:.8vh}
+.foot{position:fixed;bottom:2.4vh;right:3vw;color:var(--muted);
+  font-size:1.8vh;letter-spacing:.1em;z-index:5}
+.hint{position:fixed;bottom:2.4vh;left:3vw;color:var(--muted);
+  font-size:1.6vh;z-index:5}
+</style>
+</head>
+<body>
+
+<!-- 1 封面 -->
+<section class="slide on">
+  <img class="bg" src="media/art/title/menu.webp" alt=""><div class="dimmer"></div>
+  <p class="kicker">成功大學　PYTHON 課程專題</p>
+  <h1>糖果屋之後</h1>
+  <p class="tagline">這一次，換他來保護妹妹。</p>
+  <p class="muted">曾哲瀚　·　陳彥婷　·　陳昱安</p>
+</section>
+
+<!-- 2 遊戲是什麼 -->
+<section class="slide">
+  <video class="bg" src="media/夜晚.mp4" autoplay muted loop playsinline></video>
+  <div class="dimmer"></div>
+  <p class="big">村子餓了一整個冬天，<br>全村只有這對兄妹手上有糖。</p>
+  <p class="big"><b>白天是恩人，入夜敲門的就不是人了。</b></p>
+  <p class="dim">一盞提燈。燈照到的地方才看得見 —— 看不見的東西，還是在走。</p>
+</section>
+
+<!-- 3 一天三段 -->
+<section class="slide">
+  <h2>一天，一夜，再一天</h2>
+  <div class="row">
+    <div class="card"><img src="media/shots/08-白天商店.webp" alt="">
+      <p><b>白天</b>　糖霜換本錢，選了雷就沒有水</p></div>
+    <div class="card"><img src="media/shots/07-七夜地圖.webp" alt="">
+      <p><b>夜晚</b>　守住她五十秒，怪只從黑暗進來</p></div>
+    <div class="card"><img src="media/shots/12-天亮評分.webp" alt="">
+      <p><b>天亮</b>　六項評分，成績只往上不往下</p></div>
+  </div>
+  <p class="dim">每一種怪都有一個「這樣做就對了」的答案 —— 難的從來不是知道，是做到。</p>
+</section>
+
+<!-- 4 七夜六王 -->
+<section class="slide">
+  <video class="bg" src="media/女巫之夜.mp4" autoplay muted loop playsinline></video>
+  <div class="dimmer"></div>
+  <h2>六隻頭目，六道題目</h2>
+  <div class="bosses">
+    <figure><img src="media/art/monster/slime.webp" alt=""><figcaption>雷</figcaption></figure>
+    <figure><img src="media/art/monster/shade_archer.webp" alt=""><figcaption>光</figcaption></figure>
+    <figure><img src="media/art/monster/mist_reaper.webp" alt=""><figcaption>風</figcaption></figure>
+    <figure><img src="media/art/monster/ash_hob.webp" alt=""><figcaption>水</figcaption></figure>
+    <figure><img src="media/art/monster/moonfall.webp" alt=""><figcaption>水＋走位</figcaption></figure>
+    <figure><img src="media/art/monster/witch.webp" alt=""><figcaption>全部</figcaption></figure>
+  </div>
+  <p class="dim">灶鬼不澆水打不進去；法師的隕石，可以引去砸它自己。<br>
+     第七夜的女巫 —— 前面的招式，她<b style="color:var(--ember)">全部都有</b>。</p>
+</section>
+
+<!-- 5 團隊與工程 -->
+<section class="slide">
+  <h2>三個人，做成一件事</h2>
+  <div class="stats">
+    <div class="stat"><div class="n">88</div><div class="t">自動測試，每顆按鈕都點過</div></div>
+    <div class="stat"><div class="n">1:1</div><div class="t">同一個種子，就是同一場遊戲</div></div>
+    <div class="stat"><div class="n">6×8</div><div class="t">技能對頭目的傷害，一格一格量</div></div>
+  </div>
+  <p class="dim">過場動畫是組員一筆一筆畫的，原封不動接進主程式；<br>
+     平衡不是用感覺調的，是量出來的。</p>
+</section>
+
+<!-- 6 收尾 -->
+<section class="slide">
+  <h2 style="font-size:8vh">糖果屋之後</h2>
+  <p class="tagline">這一次，換他來保護妹妹。</p>
+  <p class="dim">gingerbread-after.vercel.app</p>
+  <p class="muted">曾哲瀚　·　陳彥婷　·　陳昱安</p>
+</section>
+
+<div class="foot"><span id="page">1</span> / 6</div>
+<div class="hint">←→ 或點擊翻頁　·　F 全螢幕</div>
+
+<script>
+const slides=[...document.querySelectorAll(".slide")];let at=0;
+function go(n){at=Math.max(0,Math.min(slides.length-1,n));
+  slides.forEach((s,i)=>s.classList.toggle("on",i===at));
+  document.getElementById("page").textContent=at+1;
+  slides[at].querySelectorAll("video").forEach(v=>v.play().catch(()=>{}));}
+addEventListener("keydown",e=>{
+  if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown")go(at+1);
+  else if(e.key==="ArrowLeft"||e.key==="PageUp")go(at-1);
+  else if(e.key.toLowerCase()==="f")document.documentElement.requestFullscreen?.();});
+addEventListener("click",e=>{go(e.clientX<innerWidth/3?at-1:at+1)});
+</script>
+</body>
+</html>
