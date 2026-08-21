@@ -268,3 +268,49 @@ def test_tutorials_depend_on_onboarding_not_on_which_night():
     game.session.set_onboarding(False)
     game.session.set_onboarding(True)
     assert "villager" not in game.session.taught
+
+
+def test_the_menu_button_continues_the_saved_run():
+    """整條路走一遍：買升級 → 關遊戲 → 重開 → 按主選單那顆按鈕 → 還在。
+
+    存檔曾經「存有存、讀有讀，但入口無條件開新局」—— 單元測試存和讀各自都
+    過，玩家的糖霜和升級照樣消失。所以這一支測的是玩家真的走的那條路，包含
+    最後那一顆按鈕。
+    """
+    from gingerbread.app.scenes import MenuScene, PlayScene
+
+    game = _boot()
+    _type(game, "小白")
+    _press(game, pygame.K_RETURN)
+    game.session.set_onboarding(False)
+    game.session.start(m.Mode.CAMPAIGN)
+    # 打出一點進度：學技能、跳到第三夜（帶糖霜與技能點的那條路）。
+    game.session.act("learn:bolt")
+    game.session.state = m.apply_action(game.session.state, "skipnight")
+    game.session.state = m.apply_action(game.session.state, "skipnight")
+    game.session.act("buy:reach")
+    night = game.session.state.meta.night
+    sugar = game.session.state.meta.sugar
+    ups = dict(game.session.state.meta.upgrades)
+    assert night == 3 and ups.get("reach")
+
+    # 關掉、重開、載入同一個存檔。
+    again = Game(seed=1, fullscreen=False)
+    again.session.load_profile("小白")
+    again.stack.pop()
+    menu = MenuScene(again.session)
+    again.stack.push(menu)
+    assert again.session.continuing()
+
+    # 按下主選單那顆按鈕 —— 以前就是這一下把整輪洗掉的。
+    menu._go(again.stack, m.Mode.CAMPAIGN)
+    meta = again.session.state.meta
+    assert isinstance(again.stack.top, PlayScene)
+    assert meta.night == night
+    assert meta.sugar == sugar
+    assert dict(meta.upgrades) == ups
+    assert "bolt" in meta.skills
+
+    # 全新的存檔照樣從頭開始（有序幕那條路）。
+    again.session.load_profile("新人")
+    assert not again.session.continuing()

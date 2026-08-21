@@ -170,6 +170,22 @@ class Session:
         self.accumulator = 0.0
         self.story_shown = 0
 
+    def continuing(self) -> bool:
+        """手上這一輪是不是「有進度、該接著打」的一輪。
+
+        主選單的「七夜」以前無條件開新局 —— 存檔明明有存、也有讀回來，按下
+        那顆按鈕的瞬間全部洗掉，下一次自動存檔再把空身寫回去。存讀都對，
+        入口把它毀了。這個判斷就是那顆按鈕現在的分岔：有進度就接著打，
+        全新的才開場。
+        """
+        meta = self.state.meta
+        return (bool(self.profile)
+                and meta.mode is m.Mode.CAMPAIGN
+                and self.state.phase in (m.Phase.DAY, m.Phase.NIGHT,
+                                         m.Phase.SHOP)
+                and (meta.night > 1 or meta.sugar > 0
+                     or bool(meta.skills) or bool(meta.upgrades)))
+
     def restart(self) -> None:
         """Wipe the run and go back to night one."""
         self.start(self.state.meta.mode)

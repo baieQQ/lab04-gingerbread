@@ -120,6 +120,11 @@ class MenuScene(Scene):
         The switch is honoured here rather than inside the walkthrough, so a
         player who turned it off never sees the screen flash up and vanish.
         """
+        # 有進度的一輪直接接著打 —— 不重開、不播序幕。序幕講的是「他們剛
+        # 回到村子」，對一個打到第四夜的人再講一次，等於宣告他的前三夜不算。
+        if mode is m.Mode.CAMPAIGN and self.g.continuing():
+            app.replace(PlayScene(self.g))
+            return
         if self.g.onboarding:
             app.replace(TutorialScene(self.g, mode))
             return
@@ -147,7 +152,9 @@ class MenuScene(Scene):
         # 以前是五顆 50 塞進一個 216 高的框裡，Stack 不會把溢出的那一顆收回
         # 來，所以「新手引導」直接壓在「難度」上面 —— 兩行字疊在一起。
         col = _col(ui, MID - 170, 180, 340, 262, gap=8)
-        if ui.button("campaign", col.slot(ui.s(46)), "七夜"):
+        label = (f"繼續　第 {self.g.state.meta.night} 夜"
+                 if self.g.continuing() else "七夜")
+        if ui.button("campaign", col.slot(ui.s(46)), label):
             self._go(app, m.Mode.CAMPAIGN)
         # 無盡還沒調到能見人的程度，先關起來 —— 一個做不完的模式擺在那裡讓
         # 人點下去，比暫時不給它更傷。
@@ -327,7 +334,14 @@ class TutorialScene(Scene):
         app.ui.keyboard = True
 
     def _start_mode(self, app: SceneStack) -> None:
-        """只在教學結束或跳過時，才真正建立遊戲 run。"""
+        """教學結束或跳過：有進度就接回去，全新的才建立新局。
+
+        這裡以前也是無條件 start() —— 一個回鍋玩家把新手引導重新打開、看完
+        教學，代價是整輪進度被洗掉。教學是教操作的，不該動存檔。
+        """
+        if self.mode is m.Mode.CAMPAIGN and self.g.continuing():
+            app.replace(PlayScene(self.g))
+            return
         self.g.start(self.mode)
 
         if self.mode is m.Mode.CAMPAIGN:
