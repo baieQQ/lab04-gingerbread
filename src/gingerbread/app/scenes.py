@@ -2312,7 +2312,6 @@ class ProfileScene(Scene):
         #: 輸入法還在組字的那一段（注音打到一半）。它不是已經輸入的字，所以
         #: 分開存，畫的時候也畫得比較淡。
         self.preedit = ""
-        self.pending = {key: False for key, _name, _note in FUN_MODES}
         self.warn = ""
         self.warn_left = 0.0
         self.confirm = ""              # 正在問「真的要刪嗎」的那個名字
@@ -2333,7 +2332,6 @@ class ProfileScene(Scene):
     # ── 輸入 ─────────────────────────────────────────────────────────
     def _begin_typing(self, ui: UI) -> None:
         self.typing, self.draft, self.preedit = True, "", ""
-        self.pending = {key: False for key, _name, _note in FUN_MODES}
         ui.keyboard = False            # 打字的時候方向鍵不該去走按鈕的焦點
 
     def _stop_typing(self, ui: UI) -> None:
@@ -2349,19 +2347,34 @@ class ProfileScene(Scene):
         走 TEXTINPUT 而不是 KEYDOWN 的 unicode，因為中文是輸入法送出來的：注
         音打「ㄒㄧㄠˇ」的過程是 TEXTEDITING，選完字才送一個 TEXTINPUT。只看
         按鍵的話，中文名字一個字也打不進來。
+
+        **分兩趟掃**，而且順序很重要。用注音打字的時候，選字那一下按的也是
+        Enter —— SDL 會在同一幀送出「選好的字」和「Enter 這個按鍵」，而先到的
+        是按鍵。一趟掃下來的話，Enter 會在字進到 draft 之前就把表單送出去，
+        送出的是一個空名字。
+
+        所以：先把這一幀的文字全部收完，再處理按鍵；而且只要這一幀有字進來
+        （或輸入法正在組字），那一下 Enter 就是輸入法的，不是玩家要送出。
         """
+        typed = bool(self.preedit)
         for event in ui.events:
-            if event.type == pygame.TEXTINPUT and self.typing:
+            if not self.typing:
+                break
+            if event.type == pygame.TEXTINPUT:
                 self._append(event.text)
-            elif event.type == pygame.TEXTEDITING and self.typing:
+                typed = True
+            elif event.type == pygame.TEXTEDITING:
                 self.preedit = event.text
-            elif event.type != pygame.KEYDOWN:
+                typed = True
+
+        for event in ui.events:
+            if not self.typing or event.type != pygame.KEYDOWN:
                 continue
-            elif not self.typing:
-                continue
-            elif event.key == pygame.K_BACKSPACE:
+            if event.key == pygame.K_BACKSPACE:
                 self.draft = self.draft[:-1]
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if typed:
+                    continue          # 這一下是拿來選字的
                 self._create(app, ui)
             elif event.key == pygame.K_ESCAPE:
                 self._stop_typing(ui)
@@ -2385,15 +2398,17 @@ class ProfileScene(Scene):
         self.warn, self.warn_left = why, 2.5
 
     def _create(self, app: SceneStack, ui: UI) -> None:
-        name = self.draft.strip() or "玩家"
-        name = name[:NAME_LIMIT]
+        name = self.draft.strip()[:NAME_LIMIT]
+        if not name:
+            # 以前這裡是 ``or "玩家"``。一個沒打名字就送出的動作，會安靜地開
+            # 出一個叫「玩家」的存檔 —— 而玩家看到的是「我明明打了名字」。
+            # 空的就是空的，講出來比替他決定好。
+            self._complain("先取一個名字")
+            return
         if name in self.g.profile_names():
             self._complain("這個名字已經有人用了")
             return
         self.g.load_profile(name)
-        for key, on in self.pending.items():
-            if on:
-                self.g.set_fun(key, True)
         self._stop_typing(ui)
 
     # ── 畫面 ─────────────────────────────────────────────────────────
@@ -2416,7 +2431,7 @@ class ProfileScene(Scene):
         else:
             self._detail(app, ui)
 
-        ui.text("打字輸入暱稱　·　Enter 建立　·　Esc 取消" if self.typing
+        ui.text("打字輸入暱稱　·　按「建立」完成　·　Esc 取消" if self.typing
                 else "點名字換存檔　·　點開始進遊戲",
                 (ui.s(MID), ui.s(616)), "small", P.MUTED, "center")
 
@@ -2458,29 +2473,30 @@ class ProfileScene(Scene):
                 f"　·　{hard.get(saved.difficulty, saved.difficulty)}",
                 (ui.s(630), ui.s(240)), "small", P.BONE_DIM, "center")
 
-        self._switches(ui, 272, self.g.fun,
-                       lambda key, on: self.g.set_fun(key, on))
+        self._switches(ui, 262, self.g.fun,
+                       lambda key, on: self.g.set_fun(key, on),
+                       unlocked=saved.best_night >= 1)
 
         # 新手引導擺在這裡而不是主選單上：「教學看過沒有」本來就是記在名字底
         # 下的東西，換一個人玩就該重新問一次。
         on = self.g.onboarding
-        if ui.button("guide", ui.box(450, 372, 360, 42),
+        if ui.button("guide", ui.box(450, 398, 360, 40),
                      f"新手引導：{'開' if on else '關'}", size="small"):
             self.g.set_onboarding(not on)
         ui.text(f"這一輪總共挑戰 {saved.total_tries} 次",
-                (ui.s(630), ui.s(434)), "small", P.MUTED, "center")
+                (ui.s(630), ui.s(456)), "small", P.MUTED, "center")
 
-        if ui.button("go", ui.box(450, 458, 226, 48), "開始"):
+        if ui.button("go", ui.box(450, 474, 226, 46), "開始"):
             self._leave(app)
         deleting = self.confirm == name
-        if ui.button("del", ui.box(690, 458, 120, 48),
+        if ui.button("del", ui.box(690, 474, 120, 46),
                      "真的刪" if deleting else "刪除", size="small"):
             if deleting:
                 self._delete(app, ui, name)
             else:
                 self.confirm = name
         if deleting:
-            ui.text("刪掉就找不回來了", (ui.s(630), ui.s(524)), "tiny",
+            ui.text("刪掉就找不回來了", (ui.s(630), ui.s(530)), "tiny",
                     P.BLOOD, "center")
 
     def _new_panel(self, app: SceneStack, ui: UI) -> None:
@@ -2501,30 +2517,55 @@ class ProfileScene(Scene):
                 (ui.s(630), ui.s(312)), "small",
                 P.BLOOD if self.warn else P.MUTED, "center")
 
-        self._switches(ui, 344, self.pending,
-                       lambda key, on: self.pending.__setitem__(key, on))
+        # 新存檔一律是經典。三個娛樂模式要通關第一夜才解鎖，所以擺在這裡只會
+        # 是三顆永遠按不下去的按鈕 —— 講一句話比擺三顆死按鈕清楚。
+        ui.text("模式", (ui.s(450), ui.s(352)), "small", P.ARCANE)
+        ui.button("fun:classic", ui.box(450, 368, 360, 44), "經典",
+                  selected=True)
+        ui.text("撐過第一夜之後，這裡會多出三個娛樂模式。",
+                (ui.s(630), ui.s(430)), "small", P.MUTED, "center",
+                width=ui.s(360))
 
-        if ui.button("make", ui.box(450, 470, 226, 48), "建立"):
+        if ui.button("make", ui.box(450, 474, 226, 46), "建立"):
             self._create(app, ui)
-        if ui.button("cancel", ui.box(690, 470, 120, 48), "取消", size="small"):
+        if ui.button("cancel", ui.box(690, 474, 120, 46), "取消", size="small"):
             self._stop_typing(ui)
 
-    def _switches(self, ui: UI, top: int, flags: dict, toggle) -> None:
-        """三個娛樂開關，加一行「打開之後會變成什麼樣」。
+    def _switches(self, ui: UI, top: int, flags: dict, toggle, *,
+                  unlocked: bool) -> None:
+        """經典放大、放在最上面，三個娛樂模式排在它底下。
 
-        跟難度那一排同一種排法：按鈕只有標題，說明只出現一行，而且只講**現在
-        開著的**那幾個 —— 三顆按鈕各掛一行副標，眼睛要在每一顆上重新對焦。
+        原本是三顆一樣大的按鈕並排，看起來像「從這三個裡面挑一個」—— 而正常
+        玩法根本不在那三個裡面，它是「三個都不選」。一個沒有名字的預設選項，
+        玩家不會知道自己已經選了它。
+
+        娛樂模式要撐過第一夜才解鎖：這遊戲的第一夜是它自己的教學，先照規則走
+        一次，那三個開關才知道自己是在拿掉什麼。
         """
-        ui.text("特殊存檔", (ui.s(450), ui.s(top)), "small", P.ARCANE)
-        cells = Stack.split(ui.box(450, top + 16, 360, 42), 3, gap=ui.s(6))
+        ui.text("模式", (ui.s(450), ui.s(top)), "small", P.ARCANE)
+        plain = not any(flags.get(key) for key, _n, _t in FUN_MODES)
+        if ui.button("fun:classic", ui.box(450, top + 16, 360, 44), "經典",
+                     selected=plain):
+            for key, _label, _note in FUN_MODES:
+                if flags.get(key):
+                    toggle(key, False)
+
+        cells = Stack.split(ui.box(450, top + 68, 360, 38), 3, gap=ui.s(6))
         for (key, label, _note), cell in zip(FUN_MODES, cells):
             on = bool(flags.get(key))
-            if ui.button(f"fun:{key}", cell, label, selected=on, size="small"):
+            if ui.button(f"fun:{key}", cell, label, selected=on, size="small",
+                         enabled=unlocked):
                 toggle(key, not on)
+
         live = [note for key, _label, note in FUN_MODES if flags.get(key)]
-        ui.text("　·　".join(live) if live else "都關著，這是一份正式的紀錄",
-                (ui.s(630), ui.s(top + 76)), "small",
-                P.SUGAR if live else P.MUTED, "center", width=ui.s(360))
+        if not unlocked:
+            line, colour = "撐過第一夜，才會解鎖那三個娛樂模式", P.MUTED
+        elif live:
+            line, colour = "　·　".join(live), P.SUGAR
+        else:
+            line, colour = "照規則走完七夜。這是正式的紀錄。", P.MUTED
+        ui.text(line, (ui.s(630), ui.s(top + 124)), "small", colour, "center",
+                width=ui.s(360))
 
     def _delete(self, app: SceneStack, ui: UI, name: str) -> None:
         self.g.delete_profile(name)

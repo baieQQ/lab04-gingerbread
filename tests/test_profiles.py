@@ -153,3 +153,69 @@ def test_starting_from_the_profile_screen_reaches_the_menu():
     _press(game, pygame.K_RETURN)
     game.stack.top._leave(game.stack)
     assert isinstance(game.stack.top, MenuScene)
+
+
+def test_the_enter_that_picks_a_character_does_not_submit():
+    """注音選字按的也是 Enter。
+
+    SDL 會在同一幀送出「選好的字」和「Enter 這個按鍵」，而先到的是按鍵 ——
+    所以一趟掃下來，表單會在字進到欄位之前就被送出，送出的是一個空名字。
+    實際的後果是：存檔叫「玩家」，而且之後每一次都說「這個名字已經有人用了」。
+    """
+    game = _boot()
+    scene = game.stack.top
+    game.stack.frame(1 / 60.0, [
+        pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, mod=0,
+                           unicode="\r", scancode=0),
+        pygame.event.Event(pygame.TEXTINPUT, text="曾"),
+    ])
+    assert scene.draft == "曾"
+    assert game.session.profile == "", "輸入法那一下 Enter 把表單送出去了"
+    assert scene.typing is True
+
+    # 下一幀單獨按 Enter，才是真的送出。
+    _press(game, pygame.K_RETURN)
+    assert game.session.profile == "曾"
+
+
+def test_an_empty_name_is_refused_instead_of_becoming_a_default():
+    game = _boot()
+    scene = game.stack.top
+    _press(game, pygame.K_RETURN)
+    assert game.session.profile == ""
+    assert "玩家" not in game.session.profile_names()
+    assert scene.warn
+
+
+def test_the_fun_modes_are_locked_until_the_first_night_is_survived():
+    """三個娛樂模式要先照規則打過一夜才解得開。"""
+    from gingerbread.app.scenes import FUN_MODES
+
+    game = _boot()
+    _type(game, "小白")
+    _press(game, pygame.K_RETURN)
+    scene = game.stack.top
+    assert game.session.saved.best_night == 0
+
+    # 網格掃過整個右半邊：鎖著的時候按不動。
+    for x in range(455, 815, 18):
+        for y in range(270, 400, 12):
+            pygame.mouse.set_pos((x, y))
+            for event in (
+                pygame.event.Event(pygame.MOUSEMOTION, pos=(x, y), rel=(1, 1),
+                                   buttons=(0, 0, 0), touch=False),
+                pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(x, y),
+                                   button=1, touch=False),
+                pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(x, y), button=1,
+                                   touch=False)):
+                game.stack.frame(1 / 60.0, [event])
+    assert not any(game.session.fun.values()), "第一夜還沒過就開得起來"
+
+    # 撐過第一夜之後就解鎖了。
+    game.session.saved.best_night = 1
+    unlocked = []
+    for key, _label, _note in FUN_MODES:
+        game.session.set_fun(key, True)
+        unlocked.append(game.session.fun[key])
+    assert all(unlocked)
+    assert scene is game.stack.top
