@@ -54,6 +54,47 @@ SAVE_PATH = Path.home() / ".gingerbread_save.json"
 #: 會有別人放的東西。一個 JSON 由這支程式全權負責，讀壞了就當作沒有存檔。
 PROFILES_PATH = Path.home() / ".gingerbread_profiles.json"
 
+#: 內建的展示存檔：每一台拉下這份專案的機器，存檔清單裡都會有一個「展示」。
+#:
+#: 擺攤和上台報告的機器不一定是自己的電腦，而一份全新的存檔要打一小時才看
+#: 得到第七夜 —— 展示的重點是給人看整個遊戲，不是證明操作者打得過。
+#:
+#: 這不是藏起來的機關：它出現在存檔清單上、跟其他存檔長得一樣、刪掉會回到
+#: 這裡定義的原廠狀態（所以「刪除」對它來說等於「重置展示進度」）。星等刻意
+#: 不是滿分 —— ★21/21 看起來像造假，★19 看起來像真的有人打過。
+DEMO_NAME = "展示"
+DEMO_ROW = {
+    "best_night": 7,
+    "night_stars": [0, 3, 3, 2, 3, 2, 3, 3],
+    "night_tries": [0, 1, 1, 3, 2, 2, 1, 4],
+    "difficulty": "normal",
+    "onboarding": False,               # 台上沒有時間看教學
+    # 三個娛樂開關全開：台上要什麼有什麼，要關哪個在存檔面板點掉就好。
+    "fun": {"freecast": True, "seeall": True, "godmode": True},
+    # 進行中的那一輪也要是「打到第七夜的人」的樣子：八個技能都會、糖霜能買
+    # 的升級全部買滿、口袋裡還有糖。沒有這一段的話，展示存檔一進去是第一夜
+    # 的空身 —— 地圖上點得到第七夜，走進去卻什麼都沒有。
+    #
+    # 升級的等級不要在這裡寫死數字：表在 content/upgrades.py，寫死的話那邊
+    # 一改上限，這裡就變成「差一級不滿」。載入的時候查表補滿（見下面
+    # ``_full_upgrades``）。
+    "run": {
+        "night": 7, "sugar": 200, "sister_hp": 8,
+        "upgrades": "max",
+        "skills": ["bolt", "holy", "tornado", "cage",
+                   "thunderclap", "blessing", "windrun", "riptide"],
+        "slots": ["bolt", "riptide"], "points": [0, 0],
+    },
+}
+
+
+def _full_upgrades() -> dict:
+    """商店裡每一項永久升級的最高等級。展示存檔用。"""
+    from ..model.content.upgrades import UPGRADES
+
+    return {key: spec.max_level for key, spec in UPGRADES.items()
+            if not spec.consumable}
+
 
 def _merge_max(saved: list, run: list) -> list:
     """逐格取大值，長度取長的那一邊。"""
@@ -302,14 +343,26 @@ class Session:
             return {}
 
     def profile_names(self) -> list:
-        """存檔名稱，最近玩過的排前面。"""
+        """存檔名稱，最近玩過的排前面；內建的「展示」永遠在清單上。"""
         rows = self.profiles()
-        return sorted(rows, key=lambda k: -int(rows[k].get("stamp", 0)))
+        names = sorted(rows, key=lambda k: -int(rows[k].get("stamp", 0)))
+        if DEMO_NAME not in names:
+            names.append(DEMO_NAME)
+        return names
 
     def load_profile(self, name: str) -> None:
-        """切換到某個存檔；沒有這個名字就開一個新的。"""
+        """切換到某個存檔；沒有這個名字就開一個新的。
+
+        「展示」在檔案裡還不存在的時候，用 DEMO_ROW 當底 —— 所以任何一台
+        剛拉下專案的機器，點它就直接是打完七夜的狀態。
+        """
         self.profile = name[:NAME_LIMIT]
         row = self.profiles().get(self.profile, {})
+        if not row and self.profile == DEMO_NAME:
+            row = deepcopy(DEMO_ROW)
+            from ..model.content import BOSSES, MONSTERS
+
+            row["taught"] = sorted(set(MONSTERS) | set(BOSSES))
         self.taught = {str(k) for k in row.get("taught", [])}
         self.onboarding = bool(row.get("onboarding", True))
         stars = [int(v) for v in row.get("night_stars", [])]
@@ -329,12 +382,54 @@ class Session:
         fun = row.get("fun", {})
         self.fun = {key: bool(fun.get(key, False))
                     for key, _name, _note in FUN_MODES}
-        # 換存檔就換一局。留著上一個人打到一半的場地，等於把別人的進度接到
-        # 這個名字底下。
-        self.start(m.Mode.CAMPAIGN)
+        # 換存檔就換一局 —— 換成**這個名字自己的那一局**。
+        #
+        # 一開始這裡是無條件重開新局，於是每一次開存檔，糖霜、升級、技能全部
+        # 歸零：存檔記得你「最遠到過第七夜」，卻不記得你身上有什麼。那不是
+        # 存檔，是成績單。
+        self._resume_run(row.get("run"))
         self.story_shown = 0
         self.cutscenes_played.clear()
         self._save_profile()
+
+    def _resume_run(self, run) -> None:
+        """接回這個存檔進行中的那一輪；沒有的話開新的一輪。"""
+        if not isinstance(run, dict):
+            self.start(m.Mode.CAMPAIGN)
+            return
+        carried = m.Meta(
+            mode=m.Mode.CAMPAIGN,
+            best_night=self.saved.best_night,
+            best_endless_ticks=self.saved.best_endless_ticks,
+            best_endless_kills=self.saved.best_endless_kills,
+            difficulty=self.saved.difficulty,
+        )
+        carried.night_stars = list(self.saved.night_stars)
+        carried.night_tries = list(self.saved.night_tries)
+        carried.night = max(1, min(m.constants.CAMPAIGN_NIGHTS,
+                                   int(run.get("night", 1))))
+        carried.sugar = max(0, int(run.get("sugar", 0)))
+        raw = run.get("upgrades", {})
+        carried.upgrades = (_full_upgrades() if raw == "max"
+                            else {str(k): int(v) for k, v in dict(raw).items()})
+        carried.skills = [str(k) for k in run.get("skills", [])]
+        slots = list(run.get("slots", [None, None]))[:2] + [None, None]
+        carried.slots = [k if k in carried.skills else None
+                         for k in slots[:2]]
+        points = list(run.get("points", [0, 0])) + [0, 0]
+        carried.skill_points_1 = max(0, int(points[0]))
+        carried.skill_points_2 = max(0, int(points[1]))
+        carried.sister_hp = max(1, min(carried.max_sister_hp,
+                                       int(run.get("sister_hp",
+                                                   carried.max_sister_hp))))
+        for key, on in self.fun.items():
+            setattr(carried, key, on)
+        self.state = m.new_game(seed=self.seed, meta=carried)
+        # new_game 每次都會發當天的技能點，而存檔存的是「已經領過之後」的
+        # 數字 —— 不扣回來的話，每重開一次遊戲就多領一天的點數。
+        self.state.meta.skill_points_1 -= 1
+        self.state.meta.skill_points_2 -= 1
+        self.accumulator = 0.0
 
     def set_fun(self, key: str, on: bool) -> None:
         """開關一個娛樂模式，並且立刻套用到手上這一局。"""
@@ -356,7 +451,19 @@ class Session:
         if not getattr(self, "profile", ""):
             return
         rows = self.profiles()
+        meta = self.state.meta
+        run = None
+        if meta.mode is m.Mode.CAMPAIGN:
+            run = {
+                "night": meta.night, "sugar": meta.sugar,
+                "sister_hp": meta.sister_hp,
+                "upgrades": dict(meta.upgrades),
+                "skills": list(meta.skills),
+                "slots": list(meta.slots),
+                "points": [meta.skill_points_1, meta.skill_points_2],
+            }
         rows[self.profile] = {
+            "run": run,
             "best_night": self.saved.best_night,
             "best_endless_ticks": self.saved.best_endless_ticks,
             "best_endless_kills": self.saved.best_endless_kills,

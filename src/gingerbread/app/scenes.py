@@ -2319,10 +2319,12 @@ class ProfileScene(Scene):
 
     def enter(self, app: SceneStack) -> None:
         pygame.key.start_text_input()
-        names = self.g.profile_names()
-        if not self.g.profile and names:
-            self.g.load_profile(names[0])
-        if not names:
+        # 只看檔案裡真的存在的存檔 —— 內建的「展示」永遠在清單上，把它算進
+        # 去的話，一台全新的機器會自動載入展示存檔，而不是請玩家取名字。
+        real = self.g.profiles()
+        if not self.g.profile and real:
+            self.g.load_profile(self.g.profile_names()[0])
+        if not real:
             self._begin_typing(app.ui)
 
     def exit(self, app: SceneStack) -> None:
@@ -2483,7 +2485,8 @@ class ProfileScene(Scene):
         if ui.button("guide", ui.box(450, 398, 360, 40),
                      f"新手引導：{'開' if on else '關'}", size="small"):
             self.g.set_onboarding(not on)
-        ui.text(f"這一輪總共挑戰 {saved.total_tries} 次",
+        ui.text(f"這一輪總共挑戰 {saved.total_tries} 次"
+                + ("　·　內建展示存檔，刪除＝重置" if name == "展示" else ""),
                 (ui.s(630), ui.s(456)), "small", P.MUTED, "center")
 
         if ui.button("go", ui.box(450, 474, 226, 46), "開始"):
@@ -2570,9 +2573,11 @@ class ProfileScene(Scene):
     def _delete(self, app: SceneStack, ui: UI, name: str) -> None:
         self.g.delete_profile(name)
         self.confirm = ""
-        rest = self.g.profile_names()
-        if rest:
-            self.g.load_profile(rest[0])
+        # 跟 enter 同一個判斷：內建的「展示」不算「還有人在玩」。刪掉最後一
+        # 份真的存檔之後，該做的是請下一個人取名字，不是把他丟進展示存檔。
+        real = self.g.profiles()
+        if real:
+            self.g.load_profile(self.g.profile_names()[0])
         else:
             self.g.profile = ""
             self._begin_typing(ui)

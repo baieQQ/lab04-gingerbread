@@ -219,3 +219,27 @@ def test_the_fun_modes_are_locked_until_the_first_night_is_survived():
         unlocked.append(game.session.fun[key])
     assert all(unlocked)
     assert scene is game.stack.top
+
+
+def test_the_demo_profile_exists_on_a_fresh_machine():
+    """內建展示存檔：拉下專案的每一台機器，清單上都有「展示」。
+
+    這是給擺攤和上台用的 —— 一份全新存檔要打一小時才看得到第七夜，而展示的
+    重點是給人看整個遊戲。它不是藏起來的機關：出現在清單上、刪掉會回到原廠
+    狀態。
+    """
+    game = _boot()                      # conftest 已把存檔導到空的暫存資料夾
+    assert "展示" in game.session.profile_names()
+
+    game.session.load_profile("展示")
+    assert game.session.saved.best_night == 7
+    assert game.session.onboarding is False
+    assert sum(game.session.saved.night_stars) > 0
+    assert game.session.taught          # 教學全部標成看過
+
+    # 刪掉＝重置：清單上還在，再載入回到原廠狀態。
+    game.session.state.meta.award_stars(1, 1)
+    game.session.delete_profile("展示")
+    assert "展示" in game.session.profile_names()
+    game.session.load_profile("展示")
+    assert game.session.saved.night_stars[1] == 3
