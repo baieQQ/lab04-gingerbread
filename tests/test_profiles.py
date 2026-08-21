@@ -243,3 +243,28 @@ def test_the_demo_profile_exists_on_a_fresh_machine():
     assert "展示" in game.session.profile_names()
     game.session.load_profile("展示")
     assert game.session.saved.night_stars[1] == 3
+
+
+def test_tutorials_depend_on_onboarding_not_on_which_night():
+    """怪物教學關：開著新手引導、這個存檔沒教過，哪一夜都給練。
+
+    以前只有第一到第三夜有教學關 —— 對用存檔跳關的人是錯的：直接跳到第五夜
+    的人，恰好最需要認識第五夜的新怪。
+    """
+    from gingerbread.model.content import newcomers
+
+    game = _boot()
+    _type(game, "小白")
+    _press(game, pygame.K_RETURN)
+    game.session.set_onboarding(True)
+    for night in range(1, m.constants.CAMPAIGN_NIGHTS + 1):
+        fresh = newcomers(night)
+        untaught = tuple(k for k in fresh if k not in game.session.taught)
+        if fresh:
+            assert untaught == tuple(fresh), f"第 {night} 夜的新怪被跳過"
+
+    # 關掉引導＝不教；重新打開＝全部重新教（教過的紀錄清掉）。
+    game.session.teach("villager")
+    game.session.set_onboarding(False)
+    game.session.set_onboarding(True)
+    assert "villager" not in game.session.taught

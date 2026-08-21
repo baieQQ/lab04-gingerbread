@@ -1455,10 +1455,10 @@ def step_arena(scene, dt: float, session) -> None:
 
 
 # ── the practice arena ───────────────────────────────────────────────
-#: Nights whose newcomers get a hands-on round rather than a paragraph.  After
-#: night three the player has the vocabulary to read a written line, and by then
-#: a compulsory practice bout before every night is an obstacle, not a lesson.
-PRACTICE_NIGHTS = (1, 2, 3)
+#: （教學關以前只開放第一到第三夜。那個限制對「從第一夜打到第七夜」的人是
+#: 對的，對用存檔跳關的人是錯的 —— 直接跳到第五夜的人，恰好是最需要認識第
+#: 五夜新怪的人。現在改成看「這個存檔教過了沒」：沒教過的新怪，哪一夜都給
+#: 練，教過的永遠不再擋路。）
 
 
 class PracticeScene(Scene):
@@ -1643,11 +1643,13 @@ class StoryScene(Scene):
         fresh = () if endless else newcomers(night)
         boss = None if endless else self._boss_key(night)
 
-        # Nights one to three hand their newcomers to a practice round instead
-        # of describing them.  Reading "被打死會炸開" and *being* caught by the
-        # blast are not the same lesson, and the second one sticks.
-        hands_on = (night in PRACTICE_NIGHTS and fresh and not endless
-                    and self.g.onboarding)
+        # Newcomers get a hands-on round instead of a description.  Reading
+        # "被打死會炸開" and *being* caught by the blast are not the same
+        # lesson, and the second one sticks.
+        #
+        # 開不開，只看兩件事：這個存檔的新手引導有沒有開、這幾隻它教過了沒。
+        untaught = tuple(k for k in fresh if k not in self.g.taught)
+        hands_on = bool(untaught and not endless and self.g.onboarding)
 
         y = 274
         if fresh or boss:
@@ -1691,7 +1693,7 @@ class StoryScene(Scene):
         if hands_on:
             if ui.button("go", col.slot(ui.s(46)), "先認識他們",
                          "一隻一隻試，葛蕾特不會受傷"):
-                app.replace(PracticeScene(self.g, fresh))
+                app.replace(PracticeScene(self.g, untaught))
             return
         if ui.button("go", col.slot(ui.s(46)), "天亮了") or ui.up:
             app.pop()

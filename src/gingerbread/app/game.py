@@ -236,9 +236,15 @@ class Session:
         self._remember()
 
     def set_onboarding(self, on: bool) -> None:
-        """Turn the walkthroughs on or off, and remember it across runs."""
+        """Turn the walkthroughs on or off, and remember it across runs.
+
+        打開的同時把「教過了」的紀錄清掉：會去按這顆按鈕的人，要的就是再看
+        一次教學 —— 開了卻因為以前看過而什麼都沒發生，看起來是按鈕壞掉。
+        """
         if self.onboarding != on:
             self.onboarding = on
+            if on:
+                self.taught.clear()
             self._save()
 
     def teach(self, key: str) -> None:
