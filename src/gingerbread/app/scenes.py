@@ -63,6 +63,19 @@ def _col(ui: UI, x: float, y: float, w: float, h: float, gap: float = 8):
     return Stack(ui.box(x, y, w, h), gap=ui.s(gap))
 
 
+def _queue_practice(app: SceneStack, g) -> None:
+    """今晚有沒教過的新怪、引導又開著，就把練習關排進堆疊。
+
+    呼叫的時機是「這一站之下」：先推它、再推卡片，卡片收掉之後自然輪到它。
+    """
+    if g.state.meta.mode is not m.Mode.CAMPAIGN or not g.onboarding:
+        return
+    fresh = newcomers(g.state.meta.night)
+    untaught = tuple(k for k in fresh if k not in g.taught)
+    if untaught:
+        app.push(PracticeScene(g, untaught))
+
+
 # ── menu ─────────────────────────────────────────────────────────────
 def _backdrop(scene, ui: UI, key: str, dim: int) -> bool:
     """把 ``key`` 這張圖 cover 鋪滿，再壓一層 ``dim``。沒有圖回傳 False。
@@ -210,6 +223,18 @@ class TutorialScene(Scene):
 
     只處理 UI 與按鍵確認；不修改 model、不建立教學專屬戰局。
     """
+
+    #: Esc 由這個場景自己處理（關掉引導、直接開始遊戲）。少了這一行，殼層
+    #: 會搶先把場景從堆疊上彈掉 —— 而這個場景是用 replace 換掉主選單進來
+    #: 的，它就是堆疊裡唯一的畫面：彈掉之後堆疊全空，遊戲從此不畫任何東西
+    #: 也不回應任何按鍵。「Esc 跳過教學會卡死」就是這樣來的。
+    wants_escape = True
+
+    #: Esc 由這個場景自己處理（關掉引導、直接開始遊戲）。少了這一行，殼層
+    #: 會搶先把場景從堆疊上彈掉 —— 而這個場景是用 replace 換掉主選單進來
+    #: 的，它就是堆疊裡唯一的畫面：彈掉之後堆疊全空，遊戲從此不畫任何東西
+    #: 也不回應任何按鍵。「Esc 跳過教學會卡死」就是這樣來的。
+    wants_escape = True
 
     PAGES = (
         (
@@ -640,6 +665,9 @@ class MapScene(Scene):
             self.g.act(f"goto:{night}")
             self.g.story_shown = night
         app.pop()
+        # 跳過去的那一夜也可能有沒教過的新怪 —— 用地圖跳關的人跳過了入夜
+        # 卡，練習關不該跟著被跳過。
+        _queue_practice(app, self.g)
 
     # ── pieces ───────────────────────────────────────────────────────
     def _scenery(self, ui: UI) -> None:
@@ -870,6 +898,13 @@ class PlayScene(Scene):
         # they are walking back into.
         if state.phase is m.Phase.DAY and g.story_shown != state.meta.night:
             g.story_shown = state.meta.night
+            # 練習關排在最底下，動畫或文字卡收掉之後就輪到它。
+            #
+            # 它以前只掛在文字卡的一顆按鈕上 —— 而第一、二夜放的是組員做的
+            # 動畫，動畫把文字卡整個換掉，那顆按鈕就跟著消失：開著新手引導
+            # 的新玩家，恰好在最需要教學的前兩夜什麼都沒看到。現在它自己是
+            # 流程的一站，卡片只是排在它前面的另一站。
+            _queue_practice(app, g)
             # 有動畫的那幾天就播動畫，沒有的才退回文字卡 —— 同一段劇情不需要
             # 講兩次，而動畫版是組員親手畫的。
             cut = f"day_{state.meta.night}"
@@ -1689,13 +1724,12 @@ class StoryScene(Scene):
                     note = f"{note}　·　弱點：{weak['name']}"
                 y = self._row(ui, y, f"{spec.name}　（Boss）", note, P.BOSS)
 
+        # 練習關已經由 _queue_practice 排在這張卡底下了，所以這裡永遠只有
+        # 「收掉卡片」一件事 —— hands_on 只影響按鈕上的字和名單的排版。
         col = _col(ui, MID - 150, max(y + 18, 556), 300, 60, gap=10)
-        if hands_on:
-            if ui.button("go", col.slot(ui.s(46)), "先認識他們",
-                         "一隻一隻試，葛蕾特不會受傷"):
-                app.replace(PracticeScene(self.g, untaught))
-            return
-        if ui.button("go", col.slot(ui.s(46)), "天亮了") or ui.up:
+        label = "先認識他們" if hands_on else "天亮了"
+        sub = "一隻一隻試，葛蕾特不會受傷" if hands_on else None
+        if ui.button("go", col.slot(ui.s(46)), label, sub) or ui.up:
             app.pop()
 
     @staticmethod

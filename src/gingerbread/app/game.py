@@ -746,12 +746,17 @@ class Game:
                 self.window.fill(P.VOID, bar)
 
     def _toggle_pause(self) -> None:
-        from .scenes import PauseScene, PracticeScene, TutorialScene
+        from .scenes import PauseScene, PracticeScene
 
         # Escape belongs to whatever is teaching, if anything is.  Opening a
         # pause menu over a walkthrough would make the one key that obviously
         # means "I have seen enough" do something else instead.
-        if isinstance(self.stack.top, (TutorialScene, PracticeScene)):
+        #
+        # 操作導覽（TutorialScene）不在這裡處理：它自己收 Esc、自己開始遊戲
+        # （wants_escape）。以前在這裡把它彈掉，而它是堆疊裡唯一的畫面 ——
+        # 彈掉等於清空堆疊，畫面卡死。練習場照舊：它永遠疊在夜晚上面，彈掉
+        # 之後底下有東西接。
+        if isinstance(self.stack.top, PracticeScene):
             self.session.set_onboarding(False)
             self.stack.pop()
             return

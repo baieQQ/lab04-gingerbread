@@ -141,3 +141,66 @@ def test_a_night_played_with_the_lantern_only_still_ends():
             break
     assert game.session.state.phase is not m.Phase.NIGHT, "一夜跑不完"
     assert game._crash_count == 0, game._last_crash
+
+
+def test_escape_during_the_tutorial_starts_the_game_instead_of_freezing():
+    """Esc 跳過操作導覽，接下來要是遊戲，不准是一片死掉的黑。
+
+    導覽是用 replace 換掉主選單進來的 —— 它是堆疊裡唯一的畫面。殼層以前收到
+    Esc 就把最上面的場景彈掉，於是堆疊全空：不畫任何東西、不回應任何按鍵。
+    這裡照著殼層的事件迴圈一步一步走，堆疊空掉就會當場抓到。
+    """
+    from gingerbread.app.scenes import MenuScene, TutorialScene
+
+    game = _boot()
+    game.session.set_onboarding(True)
+    assert isinstance(game.stack.top, MenuScene)
+
+    # 點「七夜」進導覽。
+    game.stack.top._go(game.stack, m.Mode.CAMPAIGN)
+    assert isinstance(game.stack.top, TutorialScene)
+
+    # 照殼層的 run() 處理 Esc：wants_escape 的場景自己收，其餘開暫停選單。
+    esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0,
+                             unicode="\x1b", scancode=0)
+    if not getattr(game.stack.top, "wants_escape", False):
+        game._toggle_pause()
+    game.stack.frame(1 / 60.0, [esc])
+
+    assert game.stack.scenes, "堆疊被清空了 —— 這就是卡死"
+    assert not isinstance(game.stack.top, TutorialScene)
+    assert game.session.onboarding is False
+    for _ in range(30):                 # 之後還要畫得動
+        game.stack.frame(1 / 60.0, [])
+    assert game._crash_count == 0, game._last_crash
+
+
+def test_a_new_save_with_onboarding_gets_practice_even_on_animated_days():
+    """開著新手引導的新存檔，第一夜就要有怪物練習關。
+
+    練習關的入口以前只掛在文字版入夜卡的一顆按鈕上 —— 而第一、二夜放的是
+    組員做的動畫，動畫把文字卡整個換掉，那顆按鈕就跟著消失：開著引導的新玩
+    家，恰好在最需要教學的前兩夜什麼都看不到。現在練習關自己是流程的一站。
+    """
+    from gingerbread.app.scenes import PlayScene, PracticeScene
+
+    game = _boot()
+    game.session.load_profile("新人")
+    game.session.set_onboarding(True)
+    game.session.start(m.Mode.CAMPAIGN)
+    game.stack.push(PlayScene(game.session))
+    game.stack.frame(1 / 60.0, [])
+    kinds = [type(s).__name__ for s in game.stack.scenes]
+    assert "PracticeScene" in kinds, f"堆疊裡沒有練習關：{kinds}"
+
+    # 教過之後就不再排 —— 練習關不能變成每一夜的路障。
+    practice = next(s for s in game.stack.scenes
+                    if isinstance(s, PracticeScene))
+    for key in practice.queue:
+        game.session.teach(key)
+    game.session.story_shown = 0
+    while len(game.stack.scenes) > 2:
+        game.stack.pop()
+    game.stack.frame(1 / 60.0, [])
+    kinds = [type(s).__name__ for s in game.stack.scenes]
+    assert kinds.count("PracticeScene") == 0, f"教過還在排：{kinds}"
