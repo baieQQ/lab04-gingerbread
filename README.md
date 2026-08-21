@@ -6,6 +6,8 @@
 
 國立成功大學「Python Programming for Interactive Game Design」課程 Capstone 專題。
 
+介紹網站：<https://gingerbread-after.vercel.app>
+
 ---
 
 ## 玩
